@@ -96,7 +96,7 @@ if [ "$input" = "Y" ] || [ "$input" = "y" ]; then
          read -p "Add dspam functionality to $domain [Y]: " input1
          if [ "$input1" = "Y" ] || [ "$input1" = "y" ]; then
             mv $domains/$domain/.qmail-default $domains/$domain/.qmail-default.bak
-            wget -O $domains/$domain/.qmail-default ftp://ftp.qmailtoaster.com/pub/qmail/CentOS7/qmt/scripts/dspam/.qmail-default
+            wget -O $domains/$domain/.qmail-default https://raw.githubusercontent.com/qmtoaster/dsapm/master/.qmail-default
             echo "Domain: $domain ready..."
          else
             echo "Skipping $domain..."
