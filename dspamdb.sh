@@ -65,7 +65,7 @@ mysqladmin -uroot -p$MYSQLPW refresh
 echo "GRANT ALL ON dspam.* TO dspam@localhost IDENTIFIED BY 'p4ssw3rd'" | mysql -uroot -p$MYSQLPW
 mysqladmin -uroot -p$MYSQLPW reload
 mysqladmin -uroot -p$MYSQLPW refresh
-wget ftp://ftp.qmailtoaster.com/pub/qmail/CentOS7/qmt/scripts/dspam/dspamdb.sql
+wget https://raw.githubusercontent.com/qmtoaster/dsapm/master/dspamdb.sql
 if [ "$?" != "0" ]; then
    echo "Error downloading dspam db: ($?), exiting..."
    exit 1
@@ -76,7 +76,7 @@ mysqladmin -uroot -p$MYSQLPW refresh
 # Change permissions on and place proper files necessary to run dspam daemon
 chmod 777 /var/run/dspam
 cp -p  /etc/dspam.conf /etc/dspam.conf.bak
-wget ftp://ftp.qmailtoaster.com/pub/qmail/CentOS7/qmt/scripts/dspam/dspam.conf
+wget https://raw.githubusercontent.com/qmtoaster/dsapm/master/dspam.conf
 if [ "$?" != "0" ]; then
    echo "Error downloading dspam conf: ($?), exiting..."
    exit 1
