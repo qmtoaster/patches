@@ -1,1 +1,0 @@
-| /usr/bin/dspam --user "$EXT@$HOST" --deliver=stdout | /home/vpopmail/bin/vdelivermail '' bounce-no-mailbox
