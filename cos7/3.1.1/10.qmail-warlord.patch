@@ -1,0 +1,914 @@
+diff -Nur qmail-1.03-7/badloadertypes qmail-1.03-8/badloadertypes
+--- qmail-1.03-7/badloadertypes	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/badloadertypes	2018-07-04 12:42:44.676217408 -0600
+@@ -0,0 +1,4 @@
++Mi5kb
++MzIuZ
++MyLmR
++MyLkR
+diff -Nur qmail-1.03-7/badmimetypes qmail-1.03-8/badmimetypes
+--- qmail-1.03-7/badmimetypes	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/badmimetypes	2018-07-04 12:42:44.676217408 -0600
+@@ -0,0 +1,12 @@
++TVqQAAMAA
++TVpQAAIAA
++TVpAALQAc
++TVpyAXkAX
++TVrmAU4AA
++TVrhARwAk
++TVoFAQUAA
++TVoAAAQAA
++TVoIARMAA
++TVouARsAA
++TVrQAT8AA
++TVoAAAEAA
+diff -Nur qmail-1.03-7/case_startb.c qmail-1.03-8/case_startb.c
+--- qmail-1.03-7/case_startb.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/case_startb.c	2018-07-04 12:42:44.676217408 -0600
+@@ -0,0 +1,21 @@
++#include "case.h"
++
++int case_startb(s,len,t)
++register char *s;
++unsigned int len;
++register char *t;
++{
++  register unsigned char x;
++  register unsigned char y;
++
++  for (;;) {
++    y = *t++ - 'A';
++    if (y <= 'Z' - 'A') y += 'a'; else y += 'A';
++    if (!y) return 1;
++    if (!len) return 0;
++    --len;
++    x = *s++ - 'A';
++    if (x <= 'Z' - 'A') x += 'a'; else x += 'A';
++    if (x != y) return 0;
++  }
++}
+diff -Nur qmail-1.03-7/FILES.warlord qmail-1.03-8/FILES.warlord
+--- qmail-1.03-7/FILES.warlord	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/FILES.warlord	2018-07-04 12:42:44.676217408 -0600
+@@ -0,0 +1,28 @@
++The WARLORD patch modifies the following QMAIL 1.03 files:
++
++Patched files:
++
++= Makefile
++= qmail-smtpd.c
++= qmail-smtpd.8
++= qmail-showctl.c
++= qmail-control.9
++= hier.c
++= install-big.c
++= cdb_seek.c
++= TARGETS
++
++Added files:
++
+++ qmail-badloadertypes.c
+++ qmail-badloadertypes.9
+++ qmail-badmimetypes.c
+++ qmail-badmimetypes.9
+++ case_startb.c
++
++Informational files:
++
++% badloadertypes
++% badmimetypes
++% README.warlord
++% HISTORY.warlord
+diff -Nur qmail-1.03-7/hier.c qmail-1.03-8/hier.c
+--- qmail-1.03-7/hier.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-8/hier.c	2018-07-04 12:42:44.677217464 -0600
+@@ -110,6 +110,8 @@
+   c(auto_qmail,"bin","qmail-send",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","splogger",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","qmail-newu",auto_uido,auto_gidq,0700);
++  c(auto_qmail,"bin","qmail-badmimetypes",auto_uido,auto_gidq,0700);
++  c(auto_qmail,"bin","qmail-badloadertypes",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-newmrh",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-pw2u",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","qmail-inject",auto_uido,auto_gidq,0755);
+@@ -221,6 +223,10 @@
+   c(auto_qmail,"man/cat8","qmail-inject.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-showctl.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-showctl.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-badmimetypes.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-badmimetypes.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-badloadertypes.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-badloadertypes.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newmrh.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-newmrh.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newu.8",auto_uido,auto_gidq,0644);
+diff -Nur qmail-1.03-7/HISTORY.warlord qmail-1.03-8/HISTORY.warlord
+--- qmail-1.03-7/HISTORY.warlord	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/HISTORY.warlord	2018-07-04 12:42:44.677217464 -0600
+@@ -0,0 +1,24 @@
++HISTORY
++-------
++
++Convention: Version.Release.Fixlevel
++
++V.R.F	Description					Date
++--------------------------------------------------------------------
++1.2.1	Initial Release 				2003-09-09
++1.3.0  	Smarter base64 detection			2004-06-17
++1.3.1	Added badloadertype detection			2004-06-28
++1.3.4	Sync'ed with SPAMCONTROL 2.3			2004-09-14
++1.3.5	Sync'ed with SPAMCONTROL 2.3			2004-09-15
++1.3.6	Removed obsolete qhpsi defs.			2004-09-16
++1.3.7	Wrong length of MIME_LEN fixed.			2004-09-20
++1.3.8	Removed dependency on MIME_LEN.			2004-11-19
++1.3.9	Fixed 'status 11' aborts.			2004-12-09
++1.3.10	Removed function checkline in favour of a more 
++	generic multiple occurancee check 
++	badmimetype/badloadertyp stralloc now.		2005-01-29	
++1.3.11	FIXed false positive badladertype recognition
++	due to smarter base64 block identification.	2005-02-12
++1.4.0	Added control for illegal white spaces
++	in BASE64 attachements.				2006-12-29
++	
+diff -Nur qmail-1.03-7/install-big.c qmail-1.03-8/install-big.c
+--- qmail-1.03-7/install-big.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-8/install-big.c	2018-07-04 12:42:44.677217464 -0600
+@@ -110,6 +110,8 @@
+   c(auto_qmail,"bin","qmail-send",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","splogger",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","qmail-newu",auto_uido,auto_gidq,0700);
++  c(auto_qmail,"bin","qmail-badloadertypes",auto_uido,auto_gidq,0700);
++  c(auto_qmail,"bin","qmail-badmimetypes",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-newmrh",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-pw2u",auto_uido,auto_gidq,0711);
+   c(auto_qmail,"bin","qmail-inject",auto_uido,auto_gidq,0755);
+@@ -221,6 +223,10 @@
+   c(auto_qmail,"man/cat8","qmail-inject.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-showctl.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-showctl.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-badloadertypes.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-badloadertypes.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-badmimetypes.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-badmimetypes.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newmrh.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-newmrh.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newu.8",auto_uido,auto_gidq,0644);
+diff -Nur qmail-1.03-7/INSTALL.warlord qmail-1.03-8/INSTALL.warlord
+--- qmail-1.03-7/INSTALL.warlord	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/INSTALL.warlord	2018-07-04 12:42:44.678217519 -0600
+@@ -0,0 +1,26 @@
++Installation
++============
++
++1. Unpack/tar the Warlord archive in Qmail's source directory.
++2. Call ./warlord.sh.
++3. Verify the installation process; look into warlord.log.
++4. Re-make Qmail.
++
++Customization
++=============
++
++1. Copy the file badmimetypes from Qmail ./doc directory to ./control.
++2. Modifiy it to your needs.
++3. Execute qmail-newbmt.
++4. You need to define the environment variable $BADMIMETYPES in order
++   to let qmail-smtpd proceed with the badmime check.
++   You could do this globally in the qmail-smtpd start up script, 
++   or for individual senders/nets using tcpserver.
++
++Uninstallation
++==============
++
++1. Cd to the directory from where you installed Qmail/Warlord.
++2. Identify the current installed release of Warlord.
++3. Call ./warlord.sh -u Release.
++4. Re-make Qmail.
+diff -Nur qmail-1.03-7/Makefile qmail-1.03-8/Makefile
+--- qmail-1.03-7/Makefile	2018-07-04 12:10:23.587973155 -0600
++++ qmail-1.03-8/Makefile	2018-07-04 12:42:44.679217574 -0600
+@@ -229,9 +229,9 @@
+ 
+ case.a: \
+ makelib case_diffb.o case_diffs.o case_lowerb.o case_lowers.o \
+-case_starts.o
++case_starts.o case_startb.o
+ 	./makelib case.a case_diffb.o case_diffs.o case_lowerb.o \
+-	case_lowers.o case_starts.o
++	case_lowers.o case_starts.o case_startb.o
+ 
+ case_diffb.o: \
+ compile case_diffb.c case.h
+@@ -249,6 +249,10 @@
+ compile case_lowers.c case.h
+ 	./compile case_lowers.c
+ 
++case_startb.o: \
++compile case_startb.c case.h
++	./compile case_startb.c
++
+ case_starts.o: \
+ compile case_starts.c case.h
+ 	./compile case_starts.c
+@@ -831,6 +835,7 @@
+ predate datemail mailsubj qmail-upq qmail-showctl qmail-newu \
+ qmail-pw2u qmail-qread qmail-qstat qmail-tcpto qmail-tcpok \
+ qmail-pop3d qmail-popup qmail-qmqpc qmail-qmqpd qmail-qmtpd \
++qmail-badmimetypes qmail-badloadertypes \
+ qmail-smtpd sendmail tcp-env qmail-newmrh config config-fast dnscname \
+ dnsptr dnsip dnsmxip dnsfq dnstxt hostname ipmeprint qreceipt qsmhook qbiff \
+ forward preline condredirect bouncesaying except maildirmake \
+@@ -987,6 +992,7 @@
+ man: \
+ qmail-local.0 qmail-lspawn.0 qmail-getpw.0 qmail-remote.0 \
+ qmail-rspawn.0 qmail-clean.0 qmail-send.0 qmail-start.0 splogger.0 \
++qmail-badmimetypes.0 qmail-badloadertypes.0 \
+ qmail-queue.0 qmail-inject.0 mailsubj.0 qmail-showctl.0 qmail-newu.0 \
+ qmail-pw2u.0 qmail-qread.0 qmail-qstat.0 qmail-tcpto.0 qmail-tcpok.0 \
+ qmail-pop3d.0 qmail-popup.0 qmail-qmqpc.0 qmail-qmqpd.0 qmail-qmtpd.0 \
+@@ -1279,6 +1285,56 @@
+ slurpclose.h auto_qmail.h auto_uids.h qlx.h
+ 	./compile qmail-lspawn.c
+ 
++qmail-badmimetypes: \
++load qmail-badmimetypes.o cdbmss.o getln.a open.a cdbmake.a seek.a case.a \
++stralloc.a alloc.a strerr.a substdio.a error.a str.a auto_qmail.o
++	./load qmail-badmimetypes cdbmss.o getln.a open.a cdbmake.a \
++	seek.a case.a stralloc.a alloc.a strerr.a substdio.a \
++	error.a str.a auto_qmail.o 
++
++qmail-badmimetypes.0: \
++qmail-badmimetypes.8
++	nroff -man qmail-badmimetypes.8 > qmail-badmimetypes.0
++
++qmail-badmimetypes.8: \
++qmail-badmimetypes.9 conf-break conf-spawn
++	cat qmail-badmimetypes.9 \
++	| sed s}QMAILHOME}"`head -1 conf-qmail`"}g \
++	| sed s}BREAK}"`head -1 conf-break`"}g \
++	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
++	> qmail-badmimetypes.8
++
++qmail-badmimetypes.o: \
++compile qmail-badmimetypes.c strerr.h stralloc.h gen_alloc.h substdio.h \
++getln.h exit.h readwrite.h open.h auto_qmail.h cdbmss.h cdbmake.h \
++uint32.h substdio.h
++	./compile qmail-badmimetypes.c
++
++qmail-badloadertypes: \
++load qmail-badloadertypes.o cdbmss.o getln.a open.a cdbmake.a seek.a case.a \
++stralloc.a alloc.a strerr.a substdio.a error.a str.a auto_qmail.o
++	./load qmail-badloadertypes cdbmss.o getln.a open.a cdbmake.a \
++	seek.a case.a stralloc.a alloc.a strerr.a substdio.a \
++	error.a str.a auto_qmail.o
++
++qmail-badloadertypes.0: \
++qmail-badloadertypes.8
++	nroff -man qmail-badloadertypes.8 > qmail-badloadertypes.0
++
++qmail-badloadertypes.8: \
++qmail-badloadertypes.9 conf-break conf-spawn
++	cat qmail-badloadertypes.9 \
++	| sed s}QMAILHOME}"`head -1 conf-qmail`"}g \
++	| sed s}BREAK}"`head -1 conf-break`"}g \
++	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
++	> qmail-badloadertypes.8
++
++qmail-badloadertypes.o: \
++compile qmail-badloadertypes.c strerr.h stralloc.h gen_alloc.h substdio.h \
++getln.h exit.h readwrite.h open.h auto_qmail.h cdbmss.h cdbmake.h \
++uint32.h substdio.h
++	./compile qmail-badloadertypes.c
++
+ qmail-newmrh: \
+ load qmail-newmrh.o cdbmss.o getln.a open.a cdbmake.a seek.a case.a \
+ stralloc.a alloc.a strerr.a substdio.a error.a str.a auto_qmail.o
+@@ -1837,6 +1893,7 @@
+ maildirwatch.1 mailsubj.1 mbox.5 preline.1 qbiff.1 qmail-clean.8 \
+ qmail-command.8 qmail-control.9 qmail-getpw.9 qmail-header.5 \
+ qmail-inject.8 qmail-limits.9 qmail-local.8 qmail-log.5 \
++qmail-badmimetypes.9 qmail-badloadertypes.9 \
+ qmail-lspawn.8 qmail-newmrh.9 qmail-newu.9 qmail-pop3d.8 \
+ qmail-popup.8 qmail-pw2u.9 qmail-qmqpc.8 qmail-qmqpd.8 qmail-qmtpd.8 \
+ qmail-qread.8 qmail-qstat.8 qmail-queue.8 qmail-remote.8 \
+@@ -1844,6 +1901,7 @@
+ qmail-start.9 qmail-tcpok.8 qmail-tcpto.8 qmail-users.9 qmail.7 \
+ qreceipt.1 splogger.8 tcp-env.1 config.sh config-fast.sh \
+ qmail-clean.c qmail-getpw.c qmail-inject.c qmail-local.c \
++qmail-badmimetypes.c qmail-badloadertypes.c \
+ qmail-lspawn.c qmail-newmrh.c qmail-newu.c qmail-pop3d.c \
+ qmail-popup.c qmail-pw2u.c qmail-qmqpc.c qmail-qmqpd.c qmail-qmtpd.c \
+ qmail-qread.c qmail-qstat.sh qmail-queue.c qmail-remote.c \
+diff -Nur qmail-1.03-7/qmail-badloadertypes.9 qmail-1.03-8/qmail-badloadertypes.9
+--- qmail-1.03-7/qmail-badloadertypes.9	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/qmail-badloadertypes.9	2018-07-04 12:42:44.679217574 -0600
+@@ -0,0 +1,46 @@
++.TH qmail-badloadertype 8
++.SH NAME
++qmail-badloadertype \- prepare badloadertypes for qmail-smtpd
++.SH SYNOPSIS
++.B qmail-badloadertype
++.SH DESCRIPTION
++.B qmail-badloadertype
++reads the instructions in
++.B QMAILHOME/control/badloadertypes
++and writes them into
++.B QMAILHOME/control/badloadertypes.cdb
++in a binary format suited
++for quick access by
++.BR qmail-smtpd .
++
++If there is a problem with
++.BR control/badloadertypes ,
++.B qmail-badloadertype
++complains and leaves
++.B control/badloadertypes.cdb
++alone.
++
++.B qmail-badloadertype
++ensures that
++.B control/badloadertypes.cdb
++is updated atomically,
++so
++.B qmail-smtpd
++never has to wait for
++.B qmail-badloadertype
++to finish.
++However,
++.B qmail-badloadertype
++makes no attempt to protect against two simultaneous updates of
++.BR control/badloadertypes.cdb .
++For convenience,
++.B qmail-badloadertype
++allows comments (lines starting with '#') and 
++copies only the significant leading characters to
++.BR control/badloadertypes.cdb .
++
++The binary
++.B control/badloadertypes.cdb
++format is portable across machines.
++.SH "SEE ALSO"
++qmail-smtpd(8)
+diff -Nur qmail-1.03-7/qmail-badloadertypes.c qmail-1.03-8/qmail-badloadertypes.c
+--- qmail-1.03-7/qmail-badloadertypes.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/qmail-badloadertypes.c	2018-07-04 12:42:44.679217574 -0600
+@@ -0,0 +1,64 @@
++#include "strerr.h"
++#include "stralloc.h"
++#include "substdio.h"
++#include "getln.h"
++#include "exit.h"
++#include "readwrite.h"
++#include "open.h"
++#include "auto_qmail.h"
++#include "cdbmss.h"
++
++#define FATAL "qmail-badloadertypes: fatal: "
++#define LOADER_LEN 5
++
++void die_read()
++{
++  strerr_die2sys(111,FATAL,"unable to read control/badloadertypes: ");
++}
++void die_write()
++{
++  strerr_die2sys(111,FATAL,"unable to write to control/badloadertypes.tmp: ");
++}
++
++char inbuf[1024];
++substdio ssin;
++
++int fd;
++int fdtemp;
++
++struct cdbmss cdbmss;
++stralloc line = {0};
++int match;
++
++void main()
++{
++  umask(033);
++  if (chdir(auto_qmail) == -1)
++    strerr_die4sys(111,FATAL,"unable to chdir to ",auto_qmail,": ");
++
++  fd = open_read("control/badloadertypes");
++  if (fd == -1) die_read();
++
++  substdio_fdbuf(&ssin,read,fd,inbuf,sizeof inbuf);
++
++  fdtemp = open_trunc("control/badloadertypes.tmp");
++  if (fdtemp == -1) die_write();
++
++  if (cdbmss_start(&cdbmss,fdtemp) == -1) die_write();
++
++  for (;;) {
++    if (getln(&ssin,&line,&match,'\n') != 0) die_read();
++    if (line.s[0] != '#' && line.len > LOADER_LEN)
++      if (cdbmss_add(&cdbmss,line.s,LOADER_LEN,"",0) == -1)
++	die_write();
++    if (!match) break;
++  }
++
++  if (cdbmss_finish(&cdbmss) == -1) die_write();
++  if (fsync(fdtemp) == -1) die_write();
++  if (close(fdtemp) == -1) die_write(); /* NFS stupidity */
++  if (rename("control/badloadertypes.tmp","control/badloadertypes.cdb") == -1)
++    strerr_die2sys(111,FATAL,"unable to move control/badloadertypes.tmp to control/badloadertypes.cdb");
++
++  _exit(0);
++}
+diff -Nur qmail-1.03-7/qmail-badmimetypes.9 qmail-1.03-8/qmail-badmimetypes.9
+--- qmail-1.03-7/qmail-badmimetypes.9	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/qmail-badmimetypes.9	2018-07-04 12:42:44.680217630 -0600
+@@ -0,0 +1,46 @@
++.TH qmail-badmimetype 8
++.SH NAME
++qmail-badmimetype \- prepare badmimetypes for qmail-smtpd
++.SH SYNOPSIS
++.B qmail-badmimetype
++.SH DESCRIPTION
++.B qmail-badmimetype
++reads the instructions in
++.B QMAILHOME/control/badmimetypes
++and writes them into
++.B QMAILHOME/control/badmimetypes.cdb
++in a binary format suited
++for quick access by
++.BR qmail-smtpd .
++
++If there is a problem with
++.BR control/badmimetypes ,
++.B qmail-badmimetype
++complains and leaves
++.B control/badmimetypes.cdb
++alone.
++
++.B qmail-badmimetype
++ensures that
++.B control/badmimetypes.cdb
++is updated atomically,
++so
++.B qmail-smtpd
++never has to wait for
++.B qmail-badmimetype
++to finish.
++However,
++.B qmail-badmimetype
++makes no attempt to protect against two simultaneous updates of
++.BR control/badmimetypes.cdb .
++For convenience,
++.B qmail-badmimetype
++allows comments (lines starting with '#') and 
++copies only the significant leading characters to
++.BR control/badmimetypes.cdb .
++
++The binary
++.B control/badmimetypes.cdb
++format is portable across machines.
++.SH "SEE ALSO"
++qmail-smtpd(8)
+diff -Nur qmail-1.03-7/qmail-badmimetypes.c qmail-1.03-8/qmail-badmimetypes.c
+--- qmail-1.03-7/qmail-badmimetypes.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/qmail-badmimetypes.c	2018-07-04 12:42:44.680217630 -0600
+@@ -0,0 +1,64 @@
++#include "strerr.h"
++#include "stralloc.h"
++#include "substdio.h"
++#include "getln.h"
++#include "exit.h"
++#include "readwrite.h"
++#include "open.h"
++#include "auto_qmail.h"
++#include "cdbmss.h"
++
++#define FATAL "qmail-badmimetypes: fatal: "
++#define MIMETYPE_LEN 9
++
++void die_read()
++{
++  strerr_die2sys(111,FATAL,"unable to read control/badmimetypes: ");
++}
++void die_write()
++{
++  strerr_die2sys(111,FATAL,"unable to write to control/badmimetypes.tmp: ");
++}
++
++char inbuf[1024];
++substdio ssin;
++
++int fd;
++int fdtemp;
++
++struct cdbmss cdbmss;
++stralloc line = {0};
++int match;
++
++void main()
++{
++  umask(033);
++  if (chdir(auto_qmail) == -1)
++    strerr_die4sys(111,FATAL,"unable to chdir to ",auto_qmail,": ");
++
++  fd = open_read("control/badmimetypes");
++  if (fd == -1) die_read();
++
++  substdio_fdbuf(&ssin,read,fd,inbuf,sizeof inbuf);
++
++  fdtemp = open_trunc("control/badmimetypes.tmp");
++  if (fdtemp == -1) die_write();
++
++  if (cdbmss_start(&cdbmss,fdtemp) == -1) die_write();
++
++  for (;;) {
++    if (getln(&ssin,&line,&match,'\n') != 0) die_read();
++    if (line.s[0] != '#' && line.len > MIMETYPE_LEN)
++      if (cdbmss_add(&cdbmss,line.s,MIMETYPE_LEN,"",0) == -1)
++	die_write();
++    if (!match) break;
++  }
++
++  if (cdbmss_finish(&cdbmss) == -1) die_write();
++  if (fsync(fdtemp) == -1) die_write();
++  if (close(fdtemp) == -1) die_write(); /* NFS stupidity */
++  if (rename("control/badmimetypes.tmp","control/badmimetypes.cdb") == -1)
++    strerr_die2sys(111,FATAL,"unable to move control/badmimetypes.tmp to control/badmimetypes.cdb");
++
++  _exit(0);
++}
+diff -Nur qmail-1.03-7/qmail-control.9 qmail-1.03-8/qmail-control.9
+--- qmail-1.03-7/qmail-control.9	2018-07-04 12:10:23.587973155 -0600
++++ qmail-1.03-8/qmail-control.9	2018-07-04 12:42:44.680217630 -0600
+@@ -40,7 +40,9 @@
+ .ta 5c 10c
+ control	default	used by
+ 
++.I badloadertypes.cdb	\fR(none)	\fRqmail-smtpd
+ .I badmailfrom	\fR(none)	\fRqmail-smtpd
++.I badmimetypes.cdb	\fR(none)	\fRqmail-smtpd
+ .I bouncefrom	\fRMAILER-DAEMON	\fRqmail-send
+ .I bouncehost	\fIme	\fRqmail-send
+ .I concurrencylocal	\fR10	\fRqmail-send
+@@ -81,4 +83,7 @@
+ qmail-remote(8),
+ qmail-send(8),
+ qmail-showctl(8),
+-qmail-smtpd(8)
++qmail-smtpd(8),
++qmail-badloadertype(8),
++qmail-badmimetype(8),
++qmail-newmrh(8)
+diff -Nur qmail-1.03-7/qmail-showctl.c qmail-1.03-8/qmail-showctl.c
+--- qmail-1.03-7/qmail-showctl.c	2018-07-04 12:10:23.588973210 -0600
++++ qmail-1.03-8/qmail-showctl.c	2018-07-04 12:42:44.681217685 -0600
+@@ -141,7 +141,7 @@
+ {
+   DIR *dir;
+   direntry *d;
+-  struct stat stmrh;
++  struct stat stmrh;	/* multiple use */ 
+   struct stat stmrhcdb;
+ 
+   substdio_puts(subfdout,"qmail home directory: ");
+@@ -216,6 +216,41 @@
+   }
+ 
+   do_lst("badmailfrom","Any MAIL FROM is allowed.",""," not accepted in MAIL FROM.");
++
++  do_lst("badloadertypes","Any LOADER types are accepted.",""," not accepted as LOADER type.");
++  /* XXX: check badloadertypes.cdb contents */
++  substdio_puts(subfdout,"\nbadloadertypes.cdb: ");
++  if (stat("badloadertypes",&stmrh) == -1)
++    if (stat("badloadertypes.cdb",&stmrhcdb) == -1)
++      substdio_puts(subfdout,"(Default.) No effect.\n");
++    else
++      substdio_puts(subfdout,"Oops! badloadertypes.cdb exists but badloadertypes doesn't.\n");
++  else
++    if (stat("badloadertypes.cdb",&stmrhcdb) == -1)
++      substdio_puts(subfdout,"Oops! badloadertypes exists but badloadertypes.cdb doesn't.\n");
++    else
++      if (stmrh.st_mtime > stmrhcdb.st_mtime)
++        substdio_puts(subfdout,"Oops! badloadertypes.cdb is older than badloadertypes.\n");
++      else
++        substdio_puts(subfdout,"Modified recently enough; hopefully up to date.\n");
++
++  do_lst("badmimetypes","Any MIME types are accepted.",""," not accepted as MIME type.");
++  /* XXX: check badmimetypes.cdb contents */
++  substdio_puts(subfdout,"\nbadmimetypes.cdb: ");
++  if (stat("badmimetypes",&stmrh) == -1)
++    if (stat("badmimetypes.cdb",&stmrhcdb) == -1)
++      substdio_puts(subfdout,"(Default.) No effect.\n");
++    else
++      substdio_puts(subfdout,"Oops! badmimetypes.cdb exists but badmimetypes doesn't.\n");
++  else
++    if (stat("badmimetypes.cdb",&stmrhcdb) == -1)
++      substdio_puts(subfdout,"Oops! badmimetypes exists but badmimetypes.cdb doesn't.\n");
++    else
++      if (stmrh.st_mtime > stmrhcdb.st_mtime)
++        substdio_puts(subfdout,"Oops! badmimetypes.cdb is older than badmimetypes.\n");
++      else
++        substdio_puts(subfdout,"Modified recently enough; hopefully up to date.\n");
++
+   do_str("bouncefrom",0,"MAILER-DAEMON","Bounce user name is ");
+   do_str("bouncehost",1,"bouncehost","Bounce host name is ");
+   do_int("concurrencylocal","10","Local concurrency is ","");
+@@ -272,6 +307,10 @@
+     if (str_equal(d->d_name,"..")) continue;
+     if (str_equal(d->d_name,"bouncefrom")) continue;
+     if (str_equal(d->d_name,"bouncehost")) continue;
++    if (str_equal(d->d_name,"badloadertypes")) continue;
++    if (str_equal(d->d_name,"badloadertypes.cdb")) continue;
++    if (str_equal(d->d_name,"badmimetypes")) continue;
++    if (str_equal(d->d_name,"badmimetypes.cdb")) continue;
+     if (str_equal(d->d_name,"badmailfrom")) continue;
+     if (str_equal(d->d_name,"bouncefrom")) continue;
+     if (str_equal(d->d_name,"bouncehost")) continue;
+diff -Nur qmail-1.03-7/qmail-smtpd.8 qmail-1.03-8/qmail-smtpd.8
+--- qmail-1.03-7/qmail-smtpd.8	2018-07-04 12:10:23.588973210 -0600
++++ qmail-1.03-8/qmail-smtpd.8	2018-07-04 12:42:44.681217685 -0600
+@@ -37,6 +37,28 @@
+ even though such messages violate the SMTP protocol.
+ .SH "CONTROL FILES"
+ .TP 5
++.I badloadertypes.cdb
++Unacceptable base64 encoded LOADER types in message.
++.B qmail-smtpd
++will reject every message if 5 significant
++characters (eg.
++.BR Mi5kb )
++in any of it's embedded base64 attachments is identical with one
++compiled into
++.IR badloadertypes.cdb .
++Use
++.B qmail-badloadertypes
++to derive
++.I badloadertypes.cdb
++from
++.IR badloadertypes .
++The control file
++.I badloadertypes.cdb
++is evaluated if the environment variable
++.I BADLOADERTYPE='M'
++is set and the provided character matches the first character in
++.IR badloadertypes.cdb .
++.TP 5
+ .I badmailfrom
+ Unacceptable envelope sender addresses.
+ .B qmail-smtpd
+@@ -50,6 +72,30 @@
+ meaning every address at
+ .IR host .
+ .TP 5
++.I badmimetypes.cdb
++Unacceptable base64 encoded MIME types in message.
++.B qmail-smtpd
++will reject every message if the first 9 significant 
++characters (eg.
++.BR TVqQAAMAA )
++of any of it's embedded base64 attachments types is identical with one
++compiled into
++.IR badmimetypes.cdb .
++Use 
++.B qmail-badmimetypes
++to derive
++.I badmimetypes.cdb
++from
++.IR badmimetypes .
++The control file
++.I badmimetypes.cdb
++is evaluated if the environment variable
++.I BADMIMETYPE
++is set.
++In addition, irregular BASE64 attachments carrying whitespaces can 
++be rejected defining
++.IR BADMIMETYPE='!' .
++.TP 5
+ .I databytes
+ Maximum number of bytes allowed in a message,
+ or 0 for no limit.
+diff -Nur qmail-1.03-7/qmail-smtpd.c qmail-1.03-8/qmail-smtpd.c
+--- qmail-1.03-7/qmail-smtpd.c	2018-07-04 12:10:23.588973210 -0600
++++ qmail-1.03-8/qmail-smtpd.c	2018-07-04 12:42:44.682217741 -0600
+@@ -34,6 +34,7 @@
+ #include "timeoutwrite.h"
+ #include "commands.h"
+ #include "spf.h"
++#include "cdb.h"
+ 
+ /* start chkuser code */
+ #include "chkuser.h"
+@@ -44,6 +45,17 @@
+ int timeout = 1200;
+ unsigned int spfbehavior = 0;
+ 
++#define MIMETYPE_LEN 9
++#define LOADER_LEN 5
++#define BASE64MESSAGE "content-transfer-encoding: base64"
++
++static int fdbmt;
++int flagmimetype = 0;
++char *badmimeinit;
++static int fdblt;
++int flagloadertype = 0;
++char *badloaderinit;
++
+ int safewrite(fd,buf,len) int fd; char *buf; int len;
+ {
+   int r;
+@@ -100,6 +112,7 @@
+ char *remoteinfo;
+ char *local;
+ char *relayclient;
++char *reply554;
+ 
+ stralloc helohost = {0};
+ char *fakehelo; /* pointer into helohost, or 0 */
+@@ -163,6 +176,26 @@
+   if (!remotehost) remotehost = "unknown";
+   remoteinfo = env_get("TCPREMOTEINFO");
+   relayclient = env_get("RELAYCLIENT");
++
++  badmimeinit = env_get("BADMIMETYPE");
++  if (badmimeinit) {
++    if (str_len(badmimeinit) == 1)
++      if (*badmimeinit == '!') flagmimetype = 1;
++      fdbmt = open_read("control/badmimetypes.cdb");
++      if (fdbmt != -1 ) flagmimetype = flagmimetype + 2;
++  }
++
++  badloaderinit = env_get("BADLOADERTYPE");
++  if (badloaderinit) {
++    if (str_len(badloaderinit) == 1) {
++      flagloadertype = 1;
++      fdblt = open_read("control/badloadertypes.cdb");
++      if (fdblt == -1 ) flagloadertype = 0;
++    }
++  }
++
++  reply554 = env_get("REPLY554"); 
++
+   dohelo(remotehost);
+ }
+ 
+@@ -401,9 +434,76 @@
+ struct qmail qqt;
+ unsigned int bytestooverflow = 0;
+ 
++stralloc line = {0};
++stralloc base64types = {0};
++stralloc badmimetype = {0};
++stralloc badloadertype = {0};
++
++unsigned int nolines = 0;
++unsigned int flagb64 = 0;       /* lineno with BASE64MESSAGE */
++unsigned int flagbase = 0;      /* lineno with actual base64 content */
++unsigned int flagblank = 0;
++
+ void put(ch)
+ char *ch;
+ {
++  uint32 dlen;
++  int i;
++ 
++  if (flagmimetype > 0 || flagloadertype > 0 ) {
++    if (line.len < 1025)
++      if (!stralloc_catb(&line,ch,1)) die_nomem();      /* Reassamble chars to line; prepend with 'L' */
++
++    if (*ch == '\n') {
++      nolines++;
++      if (line.len == 2) { flagblank = nolines; flagbase = 0; }
++
++      if (*(line.s+1) == 'C' || *(line.s+1) == 'c') 
++        if (case_startb(line.s+1,line.len-2,BASE64MESSAGE)) flagb64 = nolines; 
++      if (flagb64 && nolines == flagblank+1 && line.len > MIMETYPE_LEN+2) flagbase = nolines; 
++      if (*(line.s+1) == '-')  { flagb64 = 0; flagbase = 0; }
++
++      if (flagmimetype > 0 && flagbase == nolines) {                             /* badmimetype */
++        if (!stralloc_catb(&base64types,line.s+1,MIMETYPE_LEN)) die_nomem();
++        if (!stralloc_0(&base64types)) die_nomem();
++
++        if (flagmimetype > 1) {
++          if (cdb_seek(fdbmt,line.s+1,MIMETYPE_LEN,&dlen)) {
++            if (!stralloc_copyb(&badmimetype,line.s+1,MIMETYPE_LEN)) die_nomem();
++            if (!stralloc_0(&badmimetype)) die_nomem();
++            qmail_fail(&qqt);
++            flagmimetype = -1;
++          }
++        }
++      }
++
++      if (flagbase && line.len > LOADER_LEN + 2) {
++        if (flagloadertype == 1 || flagmimetype == 1 || flagmimetype == 3) {
++          for ( i = 0; i < line.len - LOADER_LEN; ++i ) {
++            if (flagloadertype == 1 && *(line.s+i) == *badloaderinit) {          /* badloadertype */
++              if (cdb_seek(fdblt,line.s+i,LOADER_LEN,&dlen)) {
++                if (!stralloc_copyb(&badloadertype,line.s+i,LOADER_LEN)) die_nomem();
++                if (!stralloc_0(&badloadertype)) die_nomem();
++                qmail_fail(&qqt);
++                flagloadertype = -1;
++              }
++            }
++            if (flagmimetype == 1 || flagmimetype == 3) {
++              if (*(line.s+i) == ' ' || *(line.s+i) == '\t') {                   /* white spaces */
++                if (!stralloc_copyb(&badmimetype,line.s+i-2,MIMETYPE_LEN)) die_nomem();
++                if (!stralloc_0(&badmimetype)) die_nomem();
++                qmail_fail(&qqt);
++                flagmimetype = -2;
++              }
++            }
++          }
++        }
++      }
++
++      line.len = 0;
++      stralloc_copys(&line,"L");
++    }
++  }
+   if (bytestooverflow)
+     if (!--bytestooverflow)
+       qmail_fail(&qqt);
+@@ -513,6 +613,7 @@
+   if (!rcptto.len) { err_wantrcpt(); return; }
+   seenmail = 0;
+   if (databytes) bytestooverflow = databytes + 1;
++  if (base64types.len == 1 ) if (!env_unset("QHPSI")) die_nomem();
+   if (qmail_open(&qqt) == -1) { err_qqt(); return; }
+   qp = qmail_qp(&qqt);
+   out("354 go ahead\r\n");
+@@ -529,6 +630,12 @@
+   if (!*qqx) { acceptmessage(qp); return; }
+   if (hops) { out("554 too many hops, this message is looping (#5.4.6)\r\n"); return; }
+   if (databytes) if (!bytestooverflow) { out("552 sorry, that message size exceeds my databytes limit (#5.3.4)\r\n"); return; }
++  if (flagmimetype < 0 || flagloadertype < 0 ) { 
++    out("554 invalid message content "); 
++    if (reply554) out(reply554); 
++    out(" (#5.3.2)\r\n"); 
++    return; 
++  }
+   if (*qqx == 'D') out("554 "); else out("451 ");
+   out(qqx + 1);
+   out("\r\n");
+diff -Nur qmail-1.03-7/README.warlord qmail-1.03-8/README.warlord
+--- qmail-1.03-7/README.warlord	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-8/README.warlord	2018-07-04 12:42:44.682217741 -0600
+@@ -0,0 +1,29 @@
++README (Warlord)
++================
++
++The Warlord patch is the successor of Russell Nelson's 
++and Charles Cazabon's "qmail-smtpd-viruscan-patch".
++It realizes a robust and efficient base64 scanning.
++
++Features:
++
++- The whole message is scanned for embedded base64 attachments.
++- The first characters of the identified attachments
++  are checked against the strings found in badmimetypes.cdb,
++  if the environment variable BADMIMETYPE is present.
++- Additionally, (on purpose) irregular build base64 attachments
++  containing white spaces can be rejected.
++- The whole content of all base64 attachments
++  are checked against arbitary strings provided in 
++  badloadertypes.cdb. In order to make the search efficient,
++  the required environment variable BADLOADERTYPE has
++  to be supplied with the first character of the content
++  of the badloadertypes.cdb.
++- Customized SMTP 554 reply messages can be defined and used 
++  via the environment variable REPLY554.
++
++By means of the programs qmail-badmimetype and qmail-badloadertype, 
++the databases can be modified by need on the fly.
++
++See man qmail-smtpd, qmail-control, qmail-badmimetypes, 
++and qmail-badloadertypes.
+diff -Nur qmail-1.03-7/TARGETS qmail-1.03-8/TARGETS
+--- qmail-1.03-7/TARGETS	2018-07-04 12:10:23.591973376 -0600
++++ qmail-1.03-8/TARGETS	2018-07-04 12:42:44.683217796 -0600
+@@ -28,6 +28,7 @@
+ case_lowerb.o
+ case_lowers.o
+ case_starts.o
++case_startb.o
+ case.a
+ getln.o
+ getln2.o
+@@ -273,6 +274,10 @@
+ tcp-env.o
+ remoteinfo.o
+ tcp-env
++qmail-badmimetypes.o
++qmail-badmimetypes
++qmail-badloadertypes.o
++qmail-badloadertypes
+ qmail-newmrh.o
+ qmail-newmrh
+ config
+@@ -370,6 +375,10 @@
+ qmail-qmtpd.0
+ qmail-smtpd.0
+ tcp-env.0
++qmail-badloadertype.8
++qmail-badloadertype.0
++qmail-badmimetype.8
++qmail-badmimetype.0
+ qmail-newmrh.8
+ qmail-newmrh.0
+ qreceipt.0
