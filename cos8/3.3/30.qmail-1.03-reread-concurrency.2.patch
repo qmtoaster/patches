@@ -1,0 +1,28 @@
+diff -ruN qmail-1.03.orig/qmail-send.9 qmail-1.03/qmail-send.9
+--- qmail-1.03.orig/qmail-send.9	Mon Jun 15 12:53:16 1998
++++ qmail-1.03/qmail-send.9	Sun Sep 22 20:49:22 2002
+@@ -51,7 +51,9 @@
+ .B qmail-send
+ receives a HUP signal,
+ it will reread
+-.I locals
++.IR concurrencylocal ,
++.IR concurrencyremote ,
++.IR locals
+ and
+ .IR virtualdomains .
+ .TP 5
+diff -ruN qmail-1.03.orig/qmail-send.c qmail-1.03/qmail-send.c
+--- qmail-1.03.orig/qmail-send.c	Mon Jun 15 12:53:16 1998
++++ qmail-1.03/qmail-send.c	Mon Sep 23 01:09:43 2002
+@@ -1478,6 +1478,10 @@
+ 
+  if (control_readfile(&newlocals,"control/locals",1) != 1)
+   { log1("alert: unable to reread control/locals\n"); return; }
++ if (control_readint(&concurrency[0],"control/concurrencylocal") == -1)
++  { log1("alert: unable to reread control/concurrencylocal\n",0); return; }
++ if (control_readint(&concurrency[1],"control/concurrencyremote") == -1)
++  { log1("alert: unable to reread control/concurrencyremote\n",0); return; }
+  r = control_readfile(&newvdoms,"control/virtualdomains",0);
+  if (r == -1)
+   { log1("alert: unable to reread control/virtualdomains\n"); return; }

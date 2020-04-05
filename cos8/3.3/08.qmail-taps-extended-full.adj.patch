@@ -1,0 +1,343 @@
+http://patchlog.com/wp-content/uploads/qmail-taps-extended-full.patch
+
+diff -ruN qmail-1.03-ded-ip/error.h qmail-1.03-ded-ip-taps/error.h
+--- qmail-1.03-ded-ip/error.h	2008-11-07 23:15:20.000000000 +0200
++++ qmail-1.03-ded-ip-taps/error.h	2009-02-17 00:03:45.000000000 +0200
+@@ -1,5 +1,6 @@
+ #ifndef ERROR_H
+ #define ERROR_H
++#include <errno.h>
+ 
+ #include <errno.h>
+ 
+diff -ruN qmail-1.03-ded-ip/Makefile qmail-1.03-ded-ip-taps/Makefile
+--- qmail-1.03-ded-ip/Makefile	2008-11-07 23:15:36.000000000 +0200
++++ qmail-1.03-ded-ip-taps/Makefile	2009-02-17 00:03:45.000000000 +0200
+@@ -1465,13 +1465,14 @@
+ 	nroff -man qmail-qstat.8 > qmail-qstat.0
+ 
+ qmail-queue: \
+-load qmail-queue.o triggerpull.o fmtqfn.o now.o date822fmt.o \
+-datetime.a seek.a ndelay.a open.a sig.a alloc.a substdio.a error.a \
+-str.a fs.a auto_qmail.o auto_split.o auto_uids.o
++load qmail-queue.o triggerpull.o fmtqfn.o now.o date822fmt.o qregex.o \
++datetime.a seek.a case.a ndelay.a open.a sig.a getln.a stralloc.a alloc.a \
++substdio.a error.a control.o constmap.o str.a fs.a auto_qmail.o \
++auto_split.o auto_uids.o 
+ 	./load qmail-queue triggerpull.o fmtqfn.o now.o \
+-	date822fmt.o datetime.a seek.a ndelay.a open.a sig.a \
+-	alloc.a substdio.a error.a str.a fs.a auto_qmail.o \
+-	auto_split.o auto_uids.o 
++	date822fmt.o qregex.o control.o constmap.o datetime.a case.a seek.a \
++	ndelay.a open.a sig.a getln.a stralloc.a alloc.a substdio.a error.a \
++	str.a fs.a auto_qmail.o auto_split.o auto_uids.o
+ 
+ qmail-queue.0: \
+ qmail-queue.8
+@@ -1748,6 +1749,10 @@
+ constmap.h stralloc.h gen_alloc.h rcpthosts.h
+ 	./compile rcpthosts.c
+ 
++qregex.o: \
++compile qregex.c qregex.h
++	./compile qregex.c
++
+ readsubdir.o: \
+ compile readsubdir.c readsubdir.h direntry.h fmt.h scan.h str.h \
+ auto_split.h
+diff -ruN qmail-1.03-ded-ip/qmail-control.9 qmail-1.03-ded-ip-taps/qmail-control.9
+--- qmail-1.03-ded-ip/qmail-control.9	2008-11-07 23:15:20.000000000 +0200
++++ qmail-1.03-ded-ip-taps/qmail-control.9	2009-02-17 00:04:30.000000000 +0200
+@@ -63,6 +63,7 @@
+ .I rcpthosts	\fR(none)	\fRqmail-smtpd
+ .I smtpgreeting	\fIme	\fRqmail-smtpd
+ .I smtproutes	\fR(none)	\fRqmail-remote
++.I taps	\fR(none)	\fRqmail-queue
+ .I timeoutconnect	\fR60	\fRqmail-remote
+ .I timeoutremote	\fR1200	\fRqmail-remote
+ .I timeoutsmtpd	\fR1200	\fRqmail-smtpd
+@@ -86,6 +87,7 @@
+ .SH "SEE ALSO"
+ qmail-inject(8),
+ qmail-qmqpc(8),
++qmail-queue(8),
+ qmail-remote(8),
+ qmail-send(8),
+ qmail-showctl(8),
+diff -ruN qmail-1.03-ded-ip/qmail-queue.8 qmail-1.03-ded-ip-taps/qmail-queue.8
+--- qmail-1.03-ded-ip/qmail-queue.8	1998-06-15 13:53:16.000000000 +0300
++++ qmail-1.03-ded-ip-taps/qmail-queue.8	2009-02-17 03:52:27.000000000 +0200
+@@ -40,7 +40,12 @@
+ However, the recipients probably expect to see a proper header,
+ as described in
+ .BR qmail-header(5) .
+-
++.SH "CONTROL FILES"
++.TP 5
++.I taps
++Should contain regex syntax of email addresses to tap and
++the associated email address to send the copy to. The two
++fields should be separated by a colon.
+ Programs included with qmail which invoke
+ .B qmail-queue
+ will invoke the contents of
+diff -ruN qmail-1.03-ded-ip/qmail-queue.c qmail-1.03-ded-ip-taps/qmail-queue.c
+--- qmail-1.03-ded-ip/qmail-queue.c	2008-11-07 23:15:20.000000000 +0200
++++ qmail-1.03-ded-ip-taps/qmail-queue.c	2009-02-17 00:46:00.000000000 +0200
+@@ -16,6 +16,8 @@
+ #include "auto_uids.h"
+ #include "date822fmt.h"
+ #include "fmtqfn.h"
++#include "stralloc.h"
++#include "constmap.h"
+ 
+ #define DEATH 86400 /* 24 hours; _must_ be below q-s's OSSIFIED (36 hours) */
+ #define ADDR 1003
+@@ -25,6 +27,14 @@
+ char outbuf[256];
+ struct substdio ssout;
+ 
++int tapok = 0;
++stralloc tap = {0};
++struct constmap maptap;
++stralloc chkaddr = {0};
++int tapped;
++stralloc tapaddr = {0};
++stralloc controlfile = {0};
++
+ datetime_sec starttime;
+ struct datetime dt;
+ unsigned long mypid;
+@@ -175,6 +185,13 @@
+ 
+  alarm(DEATH);
+ 
++ stralloc_copys( &controlfile, auto_qmail);
++ stralloc_cats( &controlfile, "/control/taps");
++ stralloc_0( &controlfile);
++ tapok = control_readfile(&tap,controlfile.s,0);
++ if (tapok == -1) die(65);
++ if (!constmap_init(&maptap,tap.s,tap.len,0)) die(65);
++
+  pidopen();
+  if (fstat(messfd,&pidst) == -1) die(63);
+ 
+@@ -219,14 +236,28 @@
+  if (substdio_get(&ssin,&ch,1) < 1) die_read();
+  if (ch != 'F') die(91);
+  if (substdio_bput(&ssout,&ch,1) == -1) die_write();
++ stralloc_0(&chkaddr);
+  for (len = 0;len < ADDR;++len)
+   {
++   if ( len == 1 ) stralloc_copyb(&chkaddr, &ch,1);
++   else if ( len > 1 ) stralloc_catb(&chkaddr, &ch,1);
+    if (substdio_get(&ssin,&ch,1) < 1) die_read();
+    if (substdio_put(&ssout,&ch,1) == -1) die_write();
+    if (!ch) break;
+   }
+  if (len >= ADDR) die(11);
+ 
++ /* check the from address */
++ stralloc_0(&chkaddr);
++ if (tapped == 0 && tapcheck('F')==1 ) {
++   tapped = 1;
++   if ( tapaddr.len > 0 ) {
++     if (substdio_bput(&ssout,"T",1) == -1) die_write();
++     if (substdio_bput(&ssout,tapaddr.s,tapaddr.len) == -1) die_write();
++     if (substdio_bput(&ssout,"",1) == -1) die_write();
++   }
++ }
++
+  if (substdio_bput(&ssout,QUEUE_EXTRA,QUEUE_EXTRALEN) == -1) die_write();
+ 
+  for (;;)
+@@ -237,10 +268,24 @@
+    if (substdio_bput(&ssout,&ch,1) == -1) die_write();
+    for (len = 0;len < ADDR;++len)
+     {
++     if ( len == 1 ) stralloc_copyb(&chkaddr, &ch,1);
++     else if ( len > 1 ) stralloc_catb(&chkaddr, &ch,1);
+      if (substdio_get(&ssin,&ch,1) < 1) die_read();
+      if (substdio_bput(&ssout,&ch,1) == -1) die_write();
+      if (!ch) break;
+     }
++
++    /* check the to address */
++    stralloc_0(&chkaddr);
++    if (tapped == 0 && tapcheck('T')==1 ) {
++      tapped = 1;
++      if ( tapaddr.len > 0 ) {
++        if (substdio_bput(&ssout,"T",1) == -1) die_write();
++        if (substdio_bput(&ssout,tapaddr.s,tapaddr.len) == -1) die_write();
++        if (substdio_bput(&ssout,"",1) == -1) die_write();
++       }
++     }
++
+    if (len >= ADDR) die(11);
+   }
+ 
+@@ -252,3 +297,48 @@
+  triggerpull();
+  die(0);
+ }
++
++int tapcheck(t)
++char t;
++{
++  int i = 0;
++  int j = 0;
++  int x = 0;
++  int negate = 0;
++  stralloc curregex = {0};
++  char tmpbuf[200];
++
++  while (j < tap.len) {
++    i = j;
++    if ( tap.s[i]==t || tap.s[i]=='A'){
++	    while ((tap.s[i] != ':') && (i < tap.len)) i++;
++	    i++;
++	    j=i;
++	    while ((tap.s[i] != ':') && (i < tap.len)) i++;
++	    if (tap.s[j] == '!') {
++	      negate = 1;
++	      j++;
++	    }
++	    stralloc_copys(&tapaddr, &tap.s[i+1]);
++
++	    stralloc_copyb(&curregex,tap.s + j,(i - j));
++	    stralloc_0(&curregex);
++	    x = matchregex(chkaddr.s, curregex.s, tmpbuf);
++
++  
++	    if ((negate) && (x == 0)) {
++	      return 1;
++	    }
++	    if (!(negate) && (x > 0)) {
++	      return 1;
++	    }
++    }
++    while ((tap.s[i] != '\0') && (i < tap.len)) i++;
++    j = i + 1;
++    negate = 0;
++
++
++  }
++  return 0;
++}
++
+diff -ruN qmail-1.03-ded-ip/qregex.c qmail-1.03-ded-ip-taps/qregex.c
+--- qmail-1.03-ded-ip/qregex.c	1970-01-01 02:00:00.000000000 +0200
++++ qmail-1.03-ded-ip-taps/qregex.c	2009-02-17 00:03:45.000000000 +0200
+@@ -0,0 +1,57 @@
++/*
++ * qregex (v2)
++ * $Id: qregex.c,v 2.1 2001/12/28 07:05:21 evan Exp $
++ *
++ * Author  : Evan Borgstrom (evan at unixpimps dot org)
++ * Created : 2001/12/14 23:08:16
++ * Modified: $Date: 2001/12/28 07:05:21 $
++ * Revision: $Revision: 2.1 $
++ *
++ * Do POSIX regex matching on addresses for anti-relay / spam control.
++ * It logs to the maillog
++ * See the qregex-readme file included with this tarball.
++ * If you didn't get this file in a tarball please see the following URL:
++ *  http://www.unixpimps.org/software/qregex
++ *
++ * qregex.c is released under a BSD style copyright.
++ * See http://www.unixpimps.org/software/qregex/copyright.html
++ *
++ * Note: this revision follows the coding guidelines set forth by the rest of
++ *       the qmail code and that described at the following URL.
++ *       http://cr.yp.to/qmail/guarantee.html
++ * 
++ */
++
++#include <sys/types.h>
++#include <regex.h>
++#include "qregex.h"
++
++#define REGCOMP(X,Y)    regcomp(&X, Y, REG_EXTENDED|REG_ICASE)
++#define REGEXEC(X,Y)    regexec(&X, Y, (size_t)0, (regmatch_t *)0, (int)0)
++
++int matchregex(char *text, char *regex) {
++  regex_t qreg;
++  int retval = 0;
++
++
++  /* build the regex */
++  if ((retval = REGCOMP(qreg, regex)) != 0) {
++    regfree(&qreg);
++    return(-retval);
++  }
++
++  /* execute the regex */
++  if ((retval = REGEXEC(qreg, text)) != 0) {
++    /* did we just not match anything? */
++    if (retval == REG_NOMATCH) {
++      regfree(&qreg);
++      return(0);
++    }
++    regfree(&qreg);
++    return(-retval);
++  }
++
++  /* signal the match */
++  regfree(&qreg);
++  return(1);
++}
+diff -ruN qmail-1.03-ded-ip/qregex.h qmail-1.03-ded-ip-taps/qregex.h
+--- qmail-1.03-ded-ip/qregex.h	1970-01-01 02:00:00.000000000 +0200
++++ qmail-1.03-ded-ip-taps/qregex.h	2009-02-17 00:03:45.000000000 +0200
+@@ -0,0 +1,5 @@
++/* simple header file for the matchregex prototype */
++#ifndef _QREGEX_H_
++#define _QREGEX_H_
++int matchregex(char *text, char *regex);
++#endif
+diff -ruN qmail-1.03-ded-ip/README.tap qmail-1.03-ded-ip-taps/README.tap
+--- qmail-1.03-ded-ip/README.tap	1970-01-01 02:00:00.000000000 +0200
++++ qmail-1.03-ded-ip-taps/README.tap	2009-02-17 03:44:51.000000000 +0200
+@@ -0,0 +1,34 @@
++qmail provides the ability to make a copy of each email that flows through the system.
++This is done using the QUEUE_EXTRA code. See qmail FAQ #8.2
++
++The qmail tap patch adds additional functionality:
++1) Specify which email addresses to tap using a regex style control file. With the
++   regex function, you can specify full domains or individual email addresses.
++
++2) Specify which email address to send the emails to.
++
++3) Qmail does not need to be restated to when the taps control file is changed.
++
++The regex match is applied to both the to and from email addresses. So email
++sent to or from the addresses will be copied. Matching is case insensitive.
++If there are multiple matches, the first match is used.
++
++The queue tap patch adds a new control file:
++
++/var/qmail/control/taps
++Contains a regex style list of addresses to tap and the email
++address of where you want the copy sent to.
++
++Examples:
++a) To tap a whole domain add a line like:
++A:.*@domain.com:joe@example.com
++
++
++b) To tap an individual email address add a line like:
++A:user@domain.com:other@example.com
++
++c) To tap messages going to a domain add a line like:
++T:.*@domain.com:joe@example.com
++
++d) To tap messages comming from a domain add a line like:
++F:.*@domain.com:joe@example.com
+diff -ruN qmail-1.03-ded-ip/TARGETS qmail-1.03-ded-ip-taps/TARGETS
+--- qmail-1.03-ded-ip/TARGETS	2008-11-07 23:15:20.000000000 +0200
++++ qmail-1.03-ded-ip-taps/TARGETS	2009-02-17 00:05:13.000000000 +0200
+@@ -394,3 +394,4 @@
+ setup
+ check
+ chkuser.o
++qregex.o

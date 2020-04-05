@@ -1,0 +1,726 @@
+diff -uNr qmail-1.03/cdbmake_add.c netqmail-1.06/cdbmake_add.c
+--- qmail-1.03/cdbmake_add.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/cdbmake_add.c	2007-11-30 13:22:54.000000000 -0700
+@@ -1,3 +1,4 @@
++#include "alloc.h"
+ #include "cdbmake.h"
+ 
+ void cdbmake_init(cdbm)
+diff -uNr qmail-1.03/cdb_seek.c netqmail-1.06/cdb_seek.c
+--- qmail-1.03/cdb_seek.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/cdb_seek.c	2007-11-30 13:22:54.000000000 -0700
+@@ -1,6 +1,5 @@
+ #include <sys/types.h>
+ #include <errno.h>
+-extern int errno;
+ #include "cdb.h"
+ 
+ #ifndef SEEK_SET
+diff -uNr qmail-1.03/CHANGES netqmail-1.06/CHANGES
+--- qmail-1.03/CHANGES	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/CHANGES	2007-11-30 13:55:37.000000000 -0700
+@@ -1,3 +1,27 @@
++20071130 version: netqmail 1.06
++20071130 legal: qmail-1.03 is now in the public domain
++20051103 doc: dot-qmail.9 updated for changed (19980613) conf-patrn default, tnx ADM
++20040121 version: netqmail 1.05
++20040121 code: qmail-smtpd is protected from exceedingly long (eg 2GB)
++         header lines
++20040121 code: qmail_lspawn, qmail-newmrh, qmail-newu, and qmail-rspawn
++         are protected from misbehaving on hosts where the size of an
++         integer is not the same as the size of a character pointer
++         (eg 64 bit hosts with 32 bit ints)
++20031027 version: netqmail 1.04.
++20031027 doc: INSTALL points to http://lifewithqmail.org/lwq.html
++20031027 doc: qmail.7 identifies installation as netqmail and points to
++         http://qmail.org/
++20031027 doc: qmail-queue.8 adds explanation of $QMAILQUEUE
++20031027 doc: qmail-log.5 adds reference to errors from $QMAILQUEUE script
++20031027 doc: FAQ also points to http://cr.yp.to/qmail/faq.html and
++         http://qmail.org/
++20031027 code: qmail-smtpd identifies itself as netqmail
++20031027 code: if $QMAILQUEUE is set, it's invoked instead of qmail-queue
++20031024 code: changed errno from int to #include.
++20031024 code: fixed .qmail parsing bug.
++20031024 code: recognize 0.0.0.0 as a local address.
++20031024 code: sendmail's -f flag now overrides environment variables.
+ 19980615 version: qmail 1.03.
+ 19980614 doc: eliminated BIN.setup in favor of a web page.
+ 19980614 code: added other auto* to qmail-showctl output.
+diff -uNr qmail-1.03/COPYRIGHT netqmail-1.06/COPYRIGHT
+--- qmail-1.03/COPYRIGHT	1969-12-31 17:00:00.000000000 -0700
++++ netqmail-1.06/COPYRIGHT	2007-11-30 13:37:32.000000000 -0700
+@@ -0,0 +1,33 @@
++netqmail-1.04
++-------------
++No copyright is claimed by the distributors of netqmail for changes from
++qmail 1.03 to netqmail 1.04.
++NOTE: netqmail 1.04 is a community-assembled distribution of qmail from
++the official qmail-1.03.tar.gz and patches approved by the community.
++D. J. Bernstein did not participate in, nor has he been asked to approve
++of this distribution.
++
++netqmail-1.05
++-------------
++James Craig Burley claims copyright on the qmail-isoc patch. See the file
++
++    old-patches/qmail-isoc.patch
++
++for details on James' copyright claim and distribution license.
++
++James' patch has been combined with the original netqmail-1.04 patch
++and the result incorporated into a unified netqmail-1.05 patch.
++
++Apart from James' copyrights, no other copyright is claimed by the
++distributors of netqmail for changes from qmail 1.03 to netqmail 1.05.
++
++NOTE: netqmail 1.05 is a community-assembled distribution of qmail from
++the official qmail-1.03.tar.gz and patches approved by the community.
++D. J. Bernstein did not participate in, nor has he been asked to approve
++of this distribution.
++
++netqmail-1.06
++-------------
++The same copyright information as netqmail-1.05 applies to netqmail-1.06
++with the addition of D. J. Bernstein's dedication of qmail to the public
++domain.
+diff -uNr qmail-1.03/dns.c netqmail-1.06/dns.c
+--- qmail-1.03/dns.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/dns.c	2007-11-30 13:22:54.000000000 -0700
+@@ -7,8 +7,6 @@
+ #include <errno.h>
+ extern int res_query();
+ extern int res_search();
+-extern int errno;
+-extern int h_errno;
+ #include "ip.h"
+ #include "ipalloc.h"
+ #include "fmt.h"
+diff -uNr qmail-1.03/dot-qmail.9 netqmail-1.06/dot-qmail.9
+--- qmail-1.03/dot-qmail.9	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/dot-qmail.9	2007-11-30 13:52:30.000000000 -0700
+@@ -194,7 +194,7 @@
+ 
+ If
+ .B .qmail
+-is world-writable or group-writable,
++is world-writable,
+ .B qmail-local
+ stops and indicates a temporary failure.
+ .SH "SAFE QMAIL EDITING"
+diff -uNr qmail-1.03/error.3 netqmail-1.06/error.3
+--- qmail-1.03/error.3	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/error.3	2007-11-30 13:22:54.000000000 -0700
+@@ -3,8 +3,8 @@
+ error \- syscall error codes
+ .SH SYNTAX
+ .B #include <error.h>
+-
+-extern int \fBerrno\fP;
++.br
++.B #include <errno.h>
+ 
+ extern int \fBerror_intr\fP;
+ .br
+diff -uNr qmail-1.03/error.h netqmail-1.06/error.h
+--- qmail-1.03/error.h	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/error.h	2007-11-30 13:22:54.000000000 -0700
+@@ -1,7 +1,7 @@
+ #ifndef ERROR_H
+ #define ERROR_H
+ 
+-extern int errno;
++#include <errno.h>
+ 
+ extern int error_intr;
+ extern int error_nomem;
+diff -uNr qmail-1.03/FAQ netqmail-1.06/FAQ
+--- qmail-1.03/FAQ	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/FAQ	2007-11-30 13:22:54.000000000 -0700
+@@ -1,3 +1,6 @@
++See http://cr.yp.to/qmail/faq.html for newer FAQs not included in this
++document, and http://qmail.org/ for qmail community contributions.
++
+ 1. Controlling the appearance of outgoing messages
+ 1.1. How do I set up host masquerading?
+ 1.2. How do I set up user masquerading?
+diff -uNr qmail-1.03/FILES netqmail-1.06/FILES
+--- qmail-1.03/FILES	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/FILES	2007-11-30 13:22:54.000000000 -0700
+@@ -10,6 +10,7 @@
+ INSTALL.ids
+ INSTALL.maildir
+ INSTALL.mbox
++INSTALL-1.03
+ INSTALL.vsm
+ REMOVE.sendmail
+ REMOVE.binmail
+diff -uNr qmail-1.03/INSTALL netqmail-1.06/INSTALL
+--- qmail-1.03/INSTALL	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/INSTALL	2007-11-30 13:22:54.000000000 -0700
+@@ -1,84 +1 @@
+-SAVE COPIES OF YOUR OUTGOING MAIL! Like any other piece of software (and
+-information generally), the qmail system comes with NO WARRANTY. It's
+-much more secure and reliable than sendmail, but that's not saying much.
+-
+-
+-Things you have to decide before starting:
+-
+-* The qmail home directory, normally /var/qmail. To change this
+-directory, edit conf-qmail now.
+-
+-* The names of the qmail users and the qmail groups. To change these
+-names, edit conf-users and conf-groups now.
+-
+-
+-To create /var/qmail and configure qmail (won't interfere with sendmail):
+-
+- 1. Create the qmail home directory:
+-       # mkdir /var/qmail
+-
+- 2. Read INSTALL.ids. You must set up the qmail group and the qmail
+-    users before compiling the programs.
+-
+- 3. Compile the programs and create the qmail directory tree:
+-       # make setup check
+-
+- 4. Read INSTALL.ctl and FAQ. Minimal survival command:
+-       # ./config
+-
+- 5. Read INSTALL.alias. Minimal survival command:
+-       # (cd ~alias; touch .qmail-postmaster .qmail-mailer-daemon .qmail-root)
+-       # chmod 644 ~alias/.qmail*
+-
+- 6. Read INSTALL.mbox and INSTALL.vsm.
+-
+- 7. Read INSTALL.maildir.
+-
+- 8. Copy /var/qmail/boot/home (or proc) to /var/qmail/rc.
+-
+-
+-To test qmail deliveries (won't interfere with sendmail):
+-
+- 9. Enable deliveries of messages injected into qmail:
+-       # csh -cf '/var/qmail/rc &'
+-
+-10. Read TEST.deliver.
+-
+-
+-To upgrade from sendmail to qmail:
+-
+-11. Read SENDMAIL. This is what your users will want to know about the
+-    switch from sendmail to qmail.
+-
+-12. Read REMOVE.sendmail. You must remove sendmail before installing
+-    qmail.
+-
+-13. Read REMOVE.binmail.
+-
+-14. Add
+-            csh -cf '/var/qmail/rc &'
+-    to your boot scripts, so that the qmail daemons are restarted
+-    whenever your system reboots. Make sure you include the &.
+-
+-15. Make qmail's ``sendmail'' wrapper available to MUAs:
+-       # ln -s /var/qmail/bin/sendmail /usr/lib/sendmail
+-       # ln -s /var/qmail/bin/sendmail /usr/sbin/sendmail
+-    /usr/sbin might not exist on your system.
+-
+-16. Set up qmail-smtpd in /etc/inetd.conf (all on one line):
+-            smtp stream tcp nowait qmaild /var/qmail/bin/tcp-env
+-            tcp-env /var/qmail/bin/qmail-smtpd
+-
+-17. Reboot. (Or kill -HUP your inetd and make sure the qmail daemons
+-    are running.)
+-
+-18. Read TEST.receive.
+-
+-
+-
+-That's it! To report success:
+-       % ( echo 'First M. Last'; cat `cat SYSDEPS` ) | mail djb-qst@cr.yp.to
+-Replace First M. Last with your name.
+-
+-If you have questions about qmail, join the qmail mailing list; see
+-http://pobox.com/~djb/qmail.html.
++See http://lifewithqmail.org/lwq.html
+diff -uNr qmail-1.03/ipme.c netqmail-1.06/ipme.c
+--- qmail-1.03/ipme.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/ipme.c	2007-11-30 13:22:54.000000000 -0700
+@@ -46,6 +46,11 @@
+   ipme.len = 0;
+   ix.pref = 0;
+  
++  /* 0.0.0.0 is a special address which always refers to 
++   * "this host, this network", according to RFC 1122, Sec. 3.2.1.3a.
++  */
++  byte_copy(&ix.ip,4,"\0\0\0\0");
++  if (!ipalloc_append(&ipme,&ix)) { return 0; }
+   if ((s = socket(AF_INET,SOCK_STREAM,0)) == -1) return -1;
+  
+   len = 256;
+diff -uNr qmail-1.03/Makefile netqmail-1.06/Makefile
+--- qmail-1.03/Makefile	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/Makefile	2007-11-30 13:22:54.000000000 -0700
+@@ -263,7 +263,7 @@
+ 	cdbmake_add.o
+ 
+ cdbmake_add.o: \
+-compile cdbmake_add.c cdbmake.h uint32.h
++compile cdbmake_add.c cdbmake.h alloc.h uint32.h
+ 	./compile cdbmake_add.c
+ 
+ cdbmake_hash.o: \
+@@ -1483,12 +1483,12 @@
+ trigger.o fmtqfn.o quote.o now.o readsubdir.o qmail.o date822fmt.o \
+ datetime.a case.a ndelay.a getln.a wait.a seek.a fd.a sig.a open.a \
+ lock.a stralloc.a alloc.a substdio.a error.a str.a fs.a auto_qmail.o \
+-auto_split.o
++auto_split.o env.a
+ 	./load qmail-send qsutil.o control.o constmap.o newfield.o \
+ 	prioq.o trigger.o fmtqfn.o quote.o now.o readsubdir.o \
+ 	qmail.o date822fmt.o datetime.a case.a ndelay.a getln.a \
+ 	wait.a seek.a fd.a sig.a open.a lock.a stralloc.a alloc.a \
+-	substdio.a error.a str.a fs.a auto_qmail.o auto_split.o 
++	substdio.a error.a str.a fs.a auto_qmail.o auto_split.o env.a
+ 
+ qmail-send.0: \
+ qmail-send.8
+@@ -1892,7 +1892,7 @@
+ 
+ spawn.o: \
+ compile chkspawn spawn.c sig.h wait.h substdio.h byte.h str.h \
+-stralloc.h gen_alloc.h select.h exit.h coe.h open.h error.h \
++stralloc.h gen_alloc.h select.h exit.h alloc.h coe.h open.h error.h \
+ auto_qmail.h auto_uids.h auto_spawn.h
+ 	./chkspawn
+ 	./compile spawn.c
+diff -uNr qmail-1.03/qmail.7 netqmail-1.06/qmail.7
+--- qmail-1.03/qmail.7	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail.7	2007-11-30 13:22:54.000000000 -0700
+@@ -55,12 +55,14 @@
+ and
+ .BR qmail-pop3d (8).
+ 
+-This documentation describes version
+-1.03
++This documentation describes netqmail version
++1.05
+ of
+ .BR qmail .
+ See
+ .B http://pobox.com/~djb/qmail.html
+ for other
+ .BR qmail -related
+-software.
++software, and
++.B http://qmail.org/
++for other qmail community contributions.
+diff -uNr qmail-1.03/qmail.c netqmail-1.06/qmail.c
+--- qmail-1.03/qmail.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail.c	2007-11-30 13:22:54.000000000 -0700
+@@ -6,8 +6,17 @@
+ #include "fd.h"
+ #include "qmail.h"
+ #include "auto_qmail.h"
++#include "env.h"
+ 
+-static char *binqqargs[2] = { "bin/qmail-queue", 0 } ;
++static char *binqqargs[2] = { 0, 0 } ;
++
++static void setup_qqargs()
++{
++  if(!binqqargs[0])
++    binqqargs[0] = env_get("QMAILQUEUE");
++  if(!binqqargs[0])
++    binqqargs[0] = "bin/qmail-queue";
++}
+ 
+ int qmail_open(qq)
+ struct qmail *qq;
+@@ -15,6 +24,8 @@
+   int pim[2];
+   int pie[2];
+ 
++  setup_qqargs();
++
+   if (pipe(pim) == -1) return -1;
+   if (pipe(pie) == -1) { close(pim[0]); close(pim[1]); return -1; }
+  
+diff -uNr qmail-1.03/qmail-local.c netqmail-1.06/qmail-local.c
+--- qmail-1.03/qmail-local.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-local.c	2007-11-30 13:22:54.000000000 -0700
+@@ -645,7 +645,7 @@
+     {
+      cmds.s[j] = 0;
+      k = j;
+-     while ((k > i) && (cmds.s[k - 1] == ' ') || (cmds.s[k - 1] == '\t'))
++     while ((k > i) && ((cmds.s[k - 1] == ' ') || (cmds.s[k - 1] == '\t')))
+        cmds.s[--k] = 0;
+      switch(cmds.s[i])
+       {
+diff -uNr qmail-1.03/qmail-log.5 netqmail-1.06/qmail-log.5
+--- qmail-1.03/qmail-log.5	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-log.5	2007-11-30 13:22:54.000000000 -0700
+@@ -232,6 +232,11 @@
+ is unable to queue a bounce message,
+ usually because the machine is almost out of memory.
+ It will try again later.
++This can also be caused by incorrect settings of
++.B $QMAILQUEUE
++or errors in a program or script which
++.B $QMAILQUEUE
++points to.
+ .TP
+ .B unable to stat ...
+ .B qmail-send
+diff -uNr qmail-1.03/qmail-pop3d.c netqmail-1.06/qmail-pop3d.c
+--- qmail-1.03/qmail-pop3d.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-pop3d.c	2007-11-30 13:22:54.000000000 -0700
+@@ -66,14 +66,14 @@
+ void die_scan() { err("unable to scan $HOME/Maildir"); die(); }
+ 
+ void err_syntax() { err("syntax error"); }
+-void err_unimpl() { err("unimplemented"); }
++void err_unimpl(arg) char *arg; { err("unimplemented"); }
+ void err_deleted() { err("already deleted"); }
+ void err_nozero() { err("messages are counted from 1"); }
+ void err_toobig() { err("not that many messages"); }
+ void err_nosuch() { err("unable to open that message"); }
+ void err_nounlink() { err("unable to unlink all deleted messages"); }
+ 
+-void okay() { puts("+OK \r\n"); flush(); }
++void okay(arg) char *arg; { puts("+OK \r\n"); flush(); }
+ 
+ void printfn(fn) char *fn;
+ {
+@@ -146,7 +146,7 @@
+   }
+ }
+ 
+-void pop3_stat()
++void pop3_stat(arg) char *arg;
+ {
+   int i;
+   unsigned long total;
+@@ -161,15 +161,15 @@
+   flush();
+ }
+ 
+-void pop3_rset()
++void pop3_rset(arg) char *arg;
+ {
+   int i;
+   for (i = 0;i < numm;++i) m[i].flagdeleted = 0;
+   last = 0;
+-  okay();
++  okay(0);
+ }
+ 
+-void pop3_last()
++void pop3_last(arg) char *arg;
+ {
+   puts("+OK ");
+   put(strnum,fmt_uint(strnum,last));
+@@ -177,7 +177,7 @@
+   flush();
+ }
+ 
+-void pop3_quit()
++void pop3_quit(arg) char *arg;
+ {
+   int i;
+   for (i = 0;i < numm;++i)
+@@ -192,7 +192,7 @@
+ 	if (!stralloc_0(&line)) die_nomem();
+ 	rename(m[i].fn,line.s); /* if it fails, bummer */
+       }
+-  okay();
++  okay(0);
+   die();
+ }
+ 
+@@ -214,7 +214,7 @@
+   if (i == -1) return;
+   m[i].flagdeleted = 1;
+   if (i + 1 > last) last = i + 1;
+-  okay();
++  okay(0);
+ }
+ 
+ void list(i,flaguidl)
+@@ -238,7 +238,7 @@
+     list(i,flaguidl);
+   }
+   else {
+-    okay();
++    okay(0);
+     for (i = 0;i < numm;++i)
+       if (!m[i].flagdeleted)
+ 	list(i,flaguidl);
+@@ -267,7 +267,7 @@
+  
+   fd = open_read(m[i].fn);
+   if (fd == -1) { err_nosuch(); return; }
+-  okay();
++  okay(0);
+   substdio_fdbuf(&ssmsg,read,fd,ssmsgbuf,sizeof(ssmsgbuf));
+   blast(&ssmsg,limit);
+   close(fd);
+@@ -299,7 +299,7 @@
+  
+   getlist();
+ 
+-  okay();
++  okay(0);
+   commands(&ssin,pop3commands);
+   die();
+ }
+diff -uNr qmail-1.03/qmail-popup.c netqmail-1.06/qmail-popup.c
+--- qmail-1.03/qmail-popup.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-popup.c	2007-11-30 13:22:54.000000000 -0700
+@@ -64,10 +64,10 @@
+ 
+ void err_syntax() { err("syntax error"); }
+ void err_wantuser() { err("USER first"); }
+-void err_authoriz() { err("authorization first"); }
++void err_authoriz(arg) char *arg; { err("authorization first"); }
+ 
+-void okay() { puts("+OK \r\n"); flush(); }
+-void pop3_quit() { okay(); die(); }
++void okay(arg) char *arg; { puts("+OK \r\n"); flush(); }
++void pop3_quit(arg) char *arg; { okay(0); die(); }
+ 
+ 
+ char unique[FMT_ULONG + FMT_ULONG + 3];
+@@ -136,7 +136,7 @@
+ void pop3_user(arg) char *arg;
+ {
+   if (!*arg) { err_syntax(); return; }
+-  okay();
++  okay(0);
+   seenuser = 1;
+   if (!stralloc_copys(&username,arg)) die_nomem(); 
+   if (!stralloc_0(&username)) die_nomem(); 
+diff -uNr qmail-1.03/qmail-queue.8 netqmail-1.06/qmail-queue.8
+--- qmail-1.03/qmail-queue.8	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-queue.8	2007-11-30 13:22:54.000000000 -0700
+@@ -40,6 +40,12 @@
+ However, the recipients probably expect to see a proper header,
+ as described in
+ .BR qmail-header(5) .
++
++Programs included with qmail which invoke
++.B qmail-queue
++will invoke the contents of
++.B $QMAILQUEUE
++instead, if that environment variable is set.
+ .SH "FILESYSTEM RESTRICTIONS"
+ .B qmail-queue
+ imposes two constraints on the queue structure:
+diff -uNr qmail-1.03/qmail-smtpd.c netqmail-1.06/qmail-smtpd.c
+--- qmail-1.03/qmail-smtpd.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/qmail-smtpd.c	2007-11-30 13:22:54.000000000 -0700
+@@ -51,12 +51,12 @@
+ 
+ void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
+ void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
+-void err_unimpl() { out("502 unimplemented (#5.5.1)\r\n"); }
++void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
+ void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
+ void err_wantmail() { out("503 MAIL first (#5.5.1)\r\n"); }
+ void err_wantrcpt() { out("503 RCPT first (#5.5.1)\r\n"); }
+-void err_noop() { out("250 ok\r\n"); }
+-void err_vrfy() { out("252 send some mail, i'll try my best\r\n"); }
++void err_noop(arg) char *arg; { out("250 ok\r\n"); }
++void err_vrfy(arg) char *arg; { out("252 send some mail, i'll try my best\r\n"); }
+ void err_qqt() { out("451 qqt failure (#4.3.0)\r\n"); }
+ 
+ 
+@@ -67,11 +67,11 @@
+   substdio_puts(&ssout,code);
+   substdio_put(&ssout,greeting.s,greeting.len);
+ }
+-void smtp_help()
++void smtp_help(arg) char *arg;
+ {
+-  out("214 qmail home page: http://pobox.com/~djb/qmail.html\r\n");
++  out("214 netqmail home page: http://qmail.org/netqmail\r\n");
+ }
+-void smtp_quit()
++void smtp_quit(arg) char *arg;
+ {
+   smtp_greet("221 "); out("\r\n"); flush(); _exit(0);
+ }
+@@ -232,7 +232,7 @@
+   smtp_greet("250-"); out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
+   seenmail = 0; dohelo(arg);
+ }
+-void smtp_rset()
++void smtp_rset(arg) char *arg;
+ {
+   seenmail = 0;
+   out("250 flushed\r\n");
+@@ -316,8 +316,8 @@
+         if (flagmaybex) if (pos == 7) ++*hops;
+         if (pos < 2) if (ch != "\r\n"[pos]) flagmaybey = 0;
+         if (flagmaybey) if (pos == 1) flaginheader = 0;
++	++pos;
+       }
+-      ++pos;
+       if (ch == '\n') { pos = 0; flagmaybex = flagmaybey = flagmaybez = 1; }
+     }
+     switch(state) {
+@@ -365,7 +365,7 @@
+   out("\r\n");
+ }
+ 
+-void smtp_data() {
++void smtp_data(arg) char *arg; {
+   int hops;
+   unsigned long qp;
+   char *qqx;
+diff -uNr qmail-1.03/README netqmail-1.06/README
+--- qmail-1.03/README	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/README	2007-12-05 13:55:30.000000000 -0700
+@@ -1,7 +1,32 @@
+-qmail 1.03
+-19980615
+-Copyright 1998
+-D. J. Bernstein, qmail@pobox.com
++netqmail 1.06
++20071130
++James Craig Burley claims copyright on the qmail-isoc patch. For
++more details, see COPYRIGHT.
++
++Apart from James' copyrights, no other copyright is claimed by the
++distributors of netqmail for changes from qmail 1.03 to netqmail 1.05.
++Daniel J. Bernstein has abandoned copyright for qmail 1.03.
++D. J. Bernstein did not participate in, nor has he been asked to
++approve of this distribution.
++
++With this distribution, we thank Daniel Bernstein for his dedication
++of qmail to the public domain.  We have taken advantage of this event
++to remove the need to apply a patch.  We will distribute a Netqmail 1.07
++shortly which includes enhancements.
++
++Netqmail 1.06 is produced by this motley krewe:
++
++Russ Nelson <nelson@qmail.org>
++Charles Cazabon <charlesc-software-netqmail@pyropus.ca>
++Dave Sill <de5@sws5.ornl.gov>
++Peter Samuel <Peter.Samuel@gormand.com.au>
++Henning Brauer <henning@bsws.de>
++Andrew Richards <ar-nq@acrconsulting.co.uk>
++Richard Lyons <rick-netqmail@frob.com.au>
++John Levine <netqmail@johnlevine.com>
++Scott Gifford <sgifford@suspectclass.com>
++Kyle Wheeler <kyle-netqmail@memoryhole.net>
++Wayne Marshall
+ 
+ qmail is a secure, reliable, efficient, simple message transfer agent.
+ It is meant as a replacement for the entire sendmail-binmail system on
+@@ -267,3 +292,4 @@
+ 0.96: ultrix-4.3-1-:pmax-:-:risc-:- (tnx YF)
+ 1.01: ultrix-4.4-0-:-:-:risc-:- (tnx RSK)
+ 1.01: unix_sv-4.2mp-2.1.2-:i386-:-:i386-:- (tnx J2W)
++
+diff -uNr qmail-1.03/sendmail.c netqmail-1.06/sendmail.c
+--- qmail-1.03/sendmail.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/sendmail.c	2007-11-30 13:22:54.000000000 -0700
+@@ -45,6 +45,38 @@
+   _exit(111);
+ }
+ 
++void do_sender(s)
++const char *s;
++{
++  char *x;
++  int n;
++  int a;
++  int i;
++  
++  env_unset("QMAILNAME");
++  env_unset("MAILNAME");
++  env_unset("NAME");
++  env_unset("QMAILHOST");
++  env_unset("MAILHOST");
++
++  n = str_len(s);
++  a = str_rchr(s, '@');
++  if (a == n)
++  {
++    env_put2("QMAILUSER", s);
++    return;
++  }
++  env_put2("QMAILHOST", s + a + 1);
++
++  x = (char *) alloc((a + 1) * sizeof(char));
++  if (!x) nomem();
++  for (i = 0; i < a; i++)
++    x[i] = s[i];
++  x[i] = 0;
++  env_put2("QMAILUSER", x);
++  alloc_free(x);
++}
++
+ int flagh;
+ char *sender;
+ 
+@@ -118,6 +150,7 @@
+   if (sender) {
+     *arg++ = "-f";
+     *arg++ = sender;
++    do_sender(sender);
+   }
+   *arg++ = "--";
+   for (i = 0;i < argc;++i) *arg++ = argv[i];
+diff -uNr qmail-1.03/spawn.c netqmail-1.06/spawn.c
+--- qmail-1.03/spawn.c	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/spawn.c	2007-11-30 13:22:54.000000000 -0700
+@@ -5,6 +5,7 @@
+ #include "substdio.h"
+ #include "byte.h"
+ #include "str.h"
++#include "alloc.h"
+ #include "stralloc.h"
+ #include "select.h"
+ #include "exit.h"
+diff -uNr qmail-1.03/THANKS netqmail-1.06/THANKS
+--- qmail-1.03/THANKS	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/THANKS	2007-11-30 13:54:28.000000000 -0700
+@@ -10,6 +10,7 @@
+ ABC = Alan B. Clegg
+ AC = Arne Coucheron
+ ACB = Andy C. Brandt
++ADM = Adam D. Morley
+ AF = Andreas Faerber
+ AG = Armin Gruner
+ AGB = Andre Grosse Bley
+diff -uNr qmail-1.03/UPGRADE netqmail-1.06/UPGRADE
+--- qmail-1.03/UPGRADE	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/UPGRADE	2007-11-30 13:22:54.000000000 -0700
+@@ -3,7 +3,7 @@
+ much more secure and reliable than sendmail, but that's not saying much.
+ 
+ 
+-Here's how to upgrade to qmail 1.03. This procedure will overwrite the
++Here's how to upgrade to netqmail 1.05. This procedure will overwrite the
+ old qmail binaries. Furthermore, it may begin delivering messages from
+ the queue before you have had a chance to test it.
+ 
+@@ -17,7 +17,7 @@
+ 
+ 
+ Before starting, compare conf* to your old conf*, and make any necessary
+-changes. You can copy conf* from 1.02.
++changes. You can copy conf* from 1.02 or 1.03.
+ 
+ 
+ How to install:
+diff -uNr qmail-1.03/VERSION netqmail-1.06/VERSION
+--- qmail-1.03/VERSION	1998-06-15 04:53:16.000000000 -0600
++++ netqmail-1.06/VERSION	2007-12-10 08:51:32.000000000 -0700
+@@ -1 +1 @@
+-qmail 1.03
++netqmail 1.06

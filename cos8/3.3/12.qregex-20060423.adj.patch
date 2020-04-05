@@ -1,0 +1,626 @@
+diff -Nur qmail-1.03-9/hier.c qmail-1.03-10/hier.c
+--- qmail-1.03-9/hier.c	2018-07-04 12:42:44.677217464 -0600
++++ qmail-1.03-10/hier.c	2018-07-04 13:00:33.832416346 -0600
+@@ -76,6 +76,7 @@
+   c(auto_qmail,"boot","binm3+df",auto_uido,auto_gidq,0755);
+ 
+   c(auto_qmail,"doc","FAQ",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"doc","README.qregex",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","UPGRADE",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","SENDMAIL",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","INSTALL",auto_uido,auto_gidq,0644);
+diff -Nur qmail-1.03-9/install-big.c qmail-1.03-10/install-big.c
+--- qmail-1.03-9/install-big.c	2018-07-04 12:42:44.677217464 -0600
++++ qmail-1.03-10/install-big.c	2018-07-04 13:00:33.833416402 -0600
+@@ -76,6 +76,7 @@
+   c(auto_qmail,"boot","binm3+df",auto_uido,auto_gidq,0755);
+ 
+   c(auto_qmail,"doc","FAQ",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"doc","README.qregex",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","UPGRADE",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","SENDMAIL",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"doc","INSTALL",auto_uido,auto_gidq,0644);
+diff -Nur qmail-1.03-9/Makefile qmail-1.03-10/Makefile
+--- qmail-1.03-9/Makefile	2018-07-04 12:42:44.679217574 -0600
++++ qmail-1.03-10/Makefile	2018-07-04 13:00:33.834416457 -0600
+@@ -1654,16 +1654,16 @@
+ 	./compile qmail-showctl.c
+ 
+ qmail-smtpd: \
+-load qmail-smtpd.o rcpthosts.o commands.o timeoutread.o \
++load qmail-smtpd.o rcpthosts.o qregex.o commands.o timeoutread.o \
+ timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o constmap.o \
+ received.o date822fmt.o now.o qmail.o spf.o dns.o cdb.a fd.a wait.a \
+-datetime.a getln.a open.a sig.a case.a env.a stralloc.a alloc.a substdio.a \
++datetime.a getln.a open.a sig.a case.a env.a stralloc.a alloc.a strerr.a substdio.a \
+ error.a str.a fs.a auto_qmail.o socket.lib $(SMTPD_CHKUSER_OBJ) dns.lib
+-	./load qmail-smtpd $(SMTPD_CHKUSER_OBJ) rcpthosts.o commands.o timeoutread.o \
++	./load qmail-smtpd qregex.o $(SMTPD_CHKUSER_OBJ) rcpthosts.o commands.o timeoutread.o \
+ 	timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o \
+ 	constmap.o received.o date822fmt.o now.o qmail.o spf.o dns.o cdb.a \
+ 	fd.a wait.a datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
+-	alloc.a substdio.a error.a fs.a auto_qmail.o \
++	alloc.a strerr.a substdio.a error.a fs.a auto_qmail.o \
+ 	str.a `cat socket.lib` $(VPOPMAIL_LIBS) `cat dns.lib`
+ 
+ qmail-smtpd.0: \
+@@ -1805,6 +1805,10 @@
+ 
+ qregex.o: \
+ compile qregex.c qregex.h
++	./compile qregex.c
++
++qregex.o: \
++compile qregex.c qregex.h
+ 	./compile qregex.c
+ 
+ readsubdir.o: \
+diff -Nur qmail-1.03-9/qmail-control.9 qmail-1.03-10/qmail-control.9
+--- qmail-1.03-9/qmail-control.9	2018-07-04 12:42:44.680217630 -0600
++++ qmail-1.03-10/qmail-control.9	2018-07-04 13:00:33.834416457 -0600
+@@ -20,7 +20,11 @@
+ 
+ Comments are allowed
+ in
++.IR badhelo ,
+ .IR badmailfrom ,
++.IR badmailfromnorelay ,
++.IR badmailto ,
++.IR badmailtonorelay ,
+ .IR locals ,
+ .IR percenthack ,
+ .IR qmqpservers ,
+@@ -41,7 +45,11 @@
+ control	default	used by
+ 
+ .I badloadertypes.cdb	\fR(none)	\fRqmail-smtpd
++.I badhelo	\fR(none)	\fRqmail-smtpd
+ .I badmailfrom	\fR(none)	\fRqmail-smtpd
++.I badmailfromnorelay	\fR(none)	\fRqmail-smtpd
++.I badmailto	\fR(none)	\fRqmail-smtpd
++.I badmailtonorelay	\fR(none)	\fRqmail-smtpd
+ .I badmimetypes.cdb	\fR(none)	\fRqmail-smtpd
+ .I bouncefrom	\fRMAILER-DAEMON	\fRqmail-send
+ .I bouncehost	\fIme	\fRqmail-send
+diff -Nur qmail-1.03-9/qmail-showctl.c qmail-1.03-10/qmail-showctl.c
+--- qmail-1.03-9/qmail-showctl.c	2018-07-04 12:42:44.681217685 -0600
++++ qmail-1.03-10/qmail-showctl.c	2018-07-04 13:00:33.835416512 -0600
+@@ -215,7 +215,11 @@
+     _exit(111);
+   }
+ 
+-  do_lst("badmailfrom","Any MAIL FROM is allowed.",""," not accepted in MAIL FROM.");
++  do_lst("badhelo","Any HELO host name is allowed.",""," HELO host name denied if it matches this pattern.");
++  do_lst("badmailfrom","Any MAIL FROM is allowed.",""," MAIL FROM denied if it matches this pattern.");
++  do_lst("badmailfromnorelay","Any MAIL FROM is allowed.",""," MAIL FROM denied if it matches this pattern and RELAYCLIENT is not set.");
++  do_lst("badmailto","No RCPT TO are specifically denied.",""," RCPT TO denied if it matches this pattern.");
++  do_lst("badmailtonorelay","No RCPT TO are specifically denied.",""," RCPT TO denied if it matches this pattern and RELAYCLIENT is not set.");
+ 
+   do_lst("badloadertypes","Any LOADER types are accepted.",""," not accepted as LOADER type.");
+   /* XXX: check badloadertypes.cdb contents */
+@@ -307,11 +311,15 @@
+     if (str_equal(d->d_name,"..")) continue;
+     if (str_equal(d->d_name,"bouncefrom")) continue;
+     if (str_equal(d->d_name,"bouncehost")) continue;
++    if (str_equal(d->d_name,"badhelo")) continue;
+     if (str_equal(d->d_name,"badloadertypes")) continue;
+     if (str_equal(d->d_name,"badloadertypes.cdb")) continue;
+     if (str_equal(d->d_name,"badmimetypes")) continue;
+     if (str_equal(d->d_name,"badmimetypes.cdb")) continue;
+     if (str_equal(d->d_name,"badmailfrom")) continue;
++    if (str_equal(d->d_name,"badmailfromnorelay")) continue;
++    if (str_equal(d->d_name,"badmailto")) continue;
++    if (str_equal(d->d_name,"badmailtonorelay")) continue;
+     if (str_equal(d->d_name,"bouncefrom")) continue;
+     if (str_equal(d->d_name,"bouncehost")) continue;
+     if (str_equal(d->d_name,"concurrencylocal")) continue;
+diff -Nur qmail-1.03-9/qmail-smtpd.8 qmail-1.03-10/qmail-smtpd.8
+--- qmail-1.03-9/qmail-smtpd.8	2018-07-04 12:42:44.681217685 -0600
++++ qmail-1.03-10/qmail-smtpd.8	2018-07-04 13:00:33.835416512 -0600
+@@ -59,11 +59,26 @@
+ is set and the provided character matches the first character in
+ .IR badloadertypes.cdb .
+ .TP 5
++.I badhelo
++Unacceptable HELO/EHLO host names.
++.B qmail-smtpd
++will reject every recipient address for a message if
++the host name is listed in, 
++or matches a POSIX regular expression pattern listed in,
++.IR badhelo .
++If the 
++.B NOBADHELO 
++environment variable is set, then the contents of 
++.IR badhelo 
++will be ignored.
++For more information, please have a look at doc/README.qregex.
++.TP 5
+ .I badmailfrom
+ Unacceptable envelope sender addresses.
+ .B qmail-smtpd
+ will reject every recipient address for a message
+-if the envelope sender address is listed in
++if the envelope sender address is listed in, or matches a POSIX regular expression
++pattern listed in,
+ .IR badmailfrom .
+ A line in
+ .I badmailfrom
+@@ -71,6 +86,32 @@
+ .BR @\fIhost ,
+ meaning every address at
+ .IR host .
++For more information, please have a look at doc/README.qregex.
++.TP 5
++.I badmailfromnorelay
++Functions the same as the
++.IR badmailfrom
++control file but is read only if the 
++.B RELAYCLIENT 
++environment variable is not set.
++For more information, please have a look at doc/README.qregex.
++.TP 5
++.I badmailto
++Unacceptable envelope recipient addresses.
++.B qmail-smtpd
++will reject every recipient address for a message if the recipient address
++is listed in,
++or matches a POSIX regular expression pattern listed in,
++.IR badmailto .
++For more information, please have a look at doc/README.qregex.
++.TP 5
++.I badmailtonorelay
++Functions the same as the
++.IR badmailto
++control file but is read only if the
++.B RELAYCLIENT
++environment variable is not set.
++For more information, please have a look at doc/README.qregex.
+ .TP 5
+ .I badmimetypes.cdb
+ Unacceptable base64 encoded MIME types in message.
+diff -Nur qmail-1.03-9/qmail-smtpd.c qmail-1.03-10/qmail-smtpd.c
+--- qmail-1.03-9/qmail-smtpd.c	2018-07-04 12:42:44.682217741 -0600
++++ qmail-1.03-10/qmail-smtpd.c	2018-07-04 13:00:33.836416568 -0600
+@@ -34,12 +34,20 @@
+ #include "timeoutwrite.h"
+ #include "commands.h"
+ #include "spf.h"
++#include "qregex.h"
++#include "strerr.h"
+ #include "cdb.h"
+ 
+ /* start chkuser code */
+ #include "chkuser.h"
+ /* end chkuser code */
+ 
++#define BMCHECK_BMF 0
++#define BMCHECK_BMFNR 1
++#define BMCHECK_BMT 2
++#define BMCHECK_BMTNR 3
++#define BMCHECK_BHELO 4
++
+ #define MAXHOPS 100
+ unsigned int databytes = 0;
+ int timeout = 1200;
+@@ -77,7 +85,9 @@
+ void die_ipme() { out("421 unable to figure out my IP addresses (#4.3.0)\r\n"); flush(); _exit(1); }
+ void straynewline() { out("451 See http://pobox.com/~djb/docs/smtplf.html.\r\n"); flush(); _exit(1); }
+ 
+-void err_bmf() { out("553 sorry, your envelope sender is in my badmailfrom list (#5.7.1)\r\n"); }
++void err_bmf() { out("553 sorry, your envelope sender has been denied (#5.7.1)\r\n"); }
++void err_bmt() { out("553 sorry, your envelope recipient has been denied (#5.7.1)\r\n"); }
++void err_bhelo() { out("553 sorry, your HELO host name has been denied (#5.7.1)\r\n"); }
+ void err_nogateway() { out("553 sorry, that domain isn't in my list of allowed rcpthosts (#5.7.1)\r\n"); }
+ void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
+ void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
+@@ -125,9 +135,24 @@
+ 
+ int liphostok = 0;
+ stralloc liphost = {0};
++
+ int bmfok = 0;
+ stralloc bmf = {0};
+-struct constmap mapbmf;
++
++int bmfnrok = 0;
++stralloc bmfnr = {0};
++
++int bmtok = 0;
++stralloc bmt = {0};
++
++int bmtnrok = 0;
++stralloc bmtnr = {0};
++
++int bhelook = 0;
++stralloc bhelo = {0};
++
++int logregex = 0;
++stralloc matchedregex = {0};
+ 
+ void setup()
+ {
+@@ -146,8 +171,21 @@
+ 
+   bmfok = control_readfile(&bmf,"control/badmailfrom",0);
+   if (bmfok == -1) die_control();
+-  if (bmfok)
+-    if (!constmap_init(&mapbmf,bmf.s,bmf.len,0)) die_nomem();
++
++  bmfnrok = control_readfile(&bmfnr,"control/badmailfromnorelay",0);
++  if (bmfnrok == -1) die_control();
++
++  bmtok = control_readfile(&bmt,"control/badmailto",0);
++  if (bmtok == -1) die_control();
++
++  bmtnrok = control_readfile(&bmtnr,"control/badmailtonorelay",0);
++  if (bmtnrok == -1) die_control();
++
++  bhelook = control_readfile(&bhelo, "control/badhelo",0);
++  if (bhelook == -1) die_control();
++  if (env_get("NOBADHELO")) bhelook = 0;
++
++  if (env_get("LOGREGEX")) logregex = 1;
+  
+   if (control_readint(&databytes,"control/databytes") == -1) die_control();
+   x = env_get("DATABYTES");
+@@ -262,14 +300,56 @@
+   return 1;
+ }
+ 
+-int bmfcheck()
++int bmcheck(which) int which;
+ {
+-  int j;
+-  if (!bmfok) return 0;
+-  if (constmap(&mapbmf,addr.s,addr.len - 1)) return 1;
+-  j = byte_rchr(addr.s,addr.len,'@');
+-  if (j < addr.len)
+-    if (constmap(&mapbmf,addr.s + j,addr.len - j - 1)) return 1;
++  int i = 0;
++  int j = 0;
++  int x = 0;
++  int negate = 0;
++  static stralloc bmb = {0};
++  static stralloc curregex = {0};
++
++  if (which == BMCHECK_BMF) {
++    if (!stralloc_copy(&bmb,&bmf)) die_nomem();
++  } else if (which == BMCHECK_BMFNR) {
++    if (!stralloc_copy(&bmb,&bmfnr)) die_nomem();
++  } else if (which == BMCHECK_BMT) {
++    if (!stralloc_copy(&bmb,&bmt)) die_nomem();
++  } else if (which == BMCHECK_BMTNR) {
++    if (!stralloc_copy(&bmb,&bmtnr)) die_nomem();
++  } else if (which == BMCHECK_BHELO) {
++    if (!stralloc_copy(&bmb,&bhelo)) die_nomem();
++  } else {
++    die_control();
++  }
++
++  while (j < bmb.len) {
++    i = j;
++    while ((bmb.s[i] != '\0') && (i < bmb.len)) i++;
++    if (bmb.s[j] == '!') {
++      negate = 1;
++      j++;
++    }
++    if (!stralloc_copyb(&curregex,bmb.s + j,(i - j))) die_nomem();
++    if (!stralloc_0(&curregex)) die_nomem();
++    if (which == BMCHECK_BHELO) {
++      x = matchregex(helohost.s, curregex.s);
++    } else {
++      x = matchregex(addr.s, curregex.s);
++    }
++    if ((negate) && (x == 0)) {
++      if (!stralloc_copyb(&matchedregex,bmb.s + j - 1,(i - j + 1))) die_nomem();
++      if (!stralloc_0(&matchedregex)) die_nomem();      
++      return 1;
++    }
++    if (!(negate) && (x > 0)) {
++      if (!stralloc_copyb(&matchedregex,bmb.s + j,(i - j))) die_nomem();
++      if (!stralloc_0(&matchedregex)) die_nomem();
++      return 1;
++    }
++    j = i + 1;
++    negate = 0;
++  }
+   return 0;
+ }
+ 
+@@ -283,7 +363,9 @@
+ 
+ 
+ int seenmail = 0;
+-int flagbarf; /* defined if seenmail */
++int flagbarfbmf; /* defined if seenmail */
++int flagbarfbmt;
++int flagbarfbhelo;
+ int flagbarfspf;
+ stralloc spfbarfmsg = {0};
+ stralloc mailfrom = {0};
+@@ -293,11 +375,13 @@
+ {
+   smtp_greet("250 "); out("\r\n");
+   seenmail = 0; dohelo(arg);
++  if (bhelook) flagbarfbhelo = bmcheck(BMCHECK_BHELO);
+ }
+ void smtp_ehlo(arg) char *arg;
+ {
+   smtp_greet("250-"); out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
+   seenmail = 0; dohelo(arg);
++  if (bhelook) flagbarfbhelo = bmcheck(BMCHECK_BHELO);
+ }
+ void smtp_rset(arg) char *arg;
+ {
+@@ -313,8 +397,12 @@
+ /* start chkuser code */
+   if (chkuser_sender (&addr) != CHKUSER_OK) { return; }
+ /* end chkuser code */
+-  flagbarf = bmfcheck();
+   flagbarfspf = 0;
++  flagbarfbmf = 0; /* bmcheck is skipped for empty envelope senders */
++  if ((bmfok) && (addr.len != 1)) flagbarfbmf = bmcheck(BMCHECK_BMF);
++  if ((!flagbarfbmf) && (bmfnrok) && (addr.len != 1) && (!relayclient)) {
++    flagbarfbmf = bmcheck(BMCHECK_BMFNR);
++  }
+   if (spfbehavior && !relayclient)
+    {
+     switch(r = spfcheck()) {
+@@ -378,8 +466,38 @@
+ void smtp_rcpt(arg) char *arg; {
+   if (!seenmail) { err_wantmail(); return; }
+   if (!addrparse(arg)) { err_syntax(); return; }
+-  if (flagbarf) { err_bmf(); return; }
+   if (flagbarfspf) { err_spf(); return; }
++  if (flagbarfbhelo) {
++    if (logregex) {
++      strerr_warn6("qmail-smtpd: badhelo: <",helohost.s,"> at ",remoteip," matches pattern: ",matchedregex.s,0);
++    } else {
++      strerr_warn4("qmail-smtpd: badhelo: <",helohost.s,"> at ",remoteip,0);
++   }
++    err_bhelo();
++    return;
++  }
++  if (flagbarfbmf) {
++    if (logregex) {
++      strerr_warn6("qmail-smtpd: badmailfrom: <",mailfrom.s,"> at ",remoteip," matches pattern: ",matchedregex.s,0);
++    } else {
++      strerr_warn4("qmail-smtpd: badmailfrom: <",mailfrom.s,"> at ",remoteip,0);
++    }
++    err_bmf();
++    return;
++  }
++  if (bmtok) flagbarfbmt = bmcheck(BMCHECK_BMT);
++  if ((!flagbarfbmt) && (bmtnrok) && (!relayclient)) {
++    flagbarfbmt = bmcheck(BMCHECK_BMTNR);
++  }
++  if (flagbarfbmt) {
++    if (logregex) {
++      strerr_warn6("qmail-smtpd: badmailto: <",addr.s,"> at ",remoteip," matches pattern: ",matchedregex.s,0);
++    } else {
++     strerr_warn4("qmail-smtpd: badmailto: <",addr.s,"> at ",remoteip,0);
++    }
++    err_bmt();
++    return;
++  }
+ 
+ /*
+  * Original code substituted by chkuser code
+diff -Nur qmail-1.03-9/README.qregex qmail-1.03-10/README.qregex
+--- qmail-1.03-9/README.qregex	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-10/README.qregex	2018-07-04 13:00:33.837416623 -0600
+@@ -0,0 +1,203 @@
++QREGEX (v2) 20060423 - README April 23, 2006
++A Regular Expression matching patch for qmail 1.03 and netqmail
++
++
++OVERVIEW:
++
++qregex adds the ability to match address evelopes via Regular Expressions (REs)
++in the qmail-smtpd process. It has the abiltiy to match `helo/ehlo` (host name),
++`mail from` (envelope sender), and `rcpt to` (envelope recipient) commands.
++It follows all the base rules that are set out with qmail (ie using control
++files) so it makes for easy integretion into an existing setup (see the
++install instructions for more info). The v2 is specified because qregex was
++re-written to better conform to the security guarantee set forth by the author
++of qmail. The original version used stdio.h and stdlib.h for reading the
++control files whereas v2 now uses all stralloc functions which are much more
++regulated against buffer overruns and the like.
++See: http://cr.yp.to/qmail/guarantee.html
++
++
++FEATURES:
++
++Features of qregex include:
++
++1. Performs pattern matching on envelope senders and envelope
++   recipients against REs in the badmailfrom and badmailto control
++   files. Two additional control files, badmailfromnorelay and
++   badmailtonorelay, are used for pattern matching when the 
++   RELAYCLIENT environment variable is not set.
++
++2. Performs pattern matching on the helo/ehlo host name. Setting the
++   NOBADHELO environment variable prevents the host name from being
++   compared to the patterns in the badhelo control file.
++
++3. Matches to patterns are logged. Setting the LOGREGEX environment
++   variable causes the matched regex pattern to be included in the log. 
++
++4. Matching is case insensitive.
++
++5. qregex ignores empty envelope senders. An empty envelope sender is not
++   compared to the patterns in the badmailfrom and badmailfromnorelay
++   control files and is always accepted.
++
++
++PLATFORMS:
++
++qregex has been built and tested on the following platforms. I'm sure it won't
++have any problems on any platform that qmail will run on (providing they have
++a regex interface) but if you run into problems let me know.
++
++	- OpenBSD 3.x
++	- FreeBSD 4.x, 5.x
++	- Mandrake Linux 9.x
++	- SuSE Linux 8.x
++
++
++
++INSTALLATION INSTRUCTIONS:
++
++Installation is very simple, there is only one requirement. You need to use the
++GNU version of the patch utility (http://www.gnu.org/software/patch/patch.html).
++(For Solaris 8 users it is installed as 'gpatch')
++
++- If this is a new setup.
++Unpack the qmail archive, cd into the qmail-1.03 directory and run
++"patch < /path/to/qregex-<version>.patch". Follow the instructions as per the
++included qmail INSTALL file. Once you are done come back to this file and read
++the section on the control files.
++
++If you are using netqmail, then unpack the netqmail archive. Run the collate.sh
++script and cd into the resulting netqmail-<version> directory. From there, run
++"patch < /path/to/qregex-<version>.patch". Complete the netqmail installation
++normally. Once you are done, come back to this file and read the section on the
++control files.
++
++- If this is an existing setup.
++FIRST: create your control files (see below).
++cd into your existing qmail or netqmail source directory. Run
++"patch < /path/to/qregex-<version>.patch" then "make qmail-smtpd". Now run
++./qmail-smtpd and test your new rules to make sure they work as expected.
++
++Install the new binary by cd'ing to /var/qmail/bin and as root (in one command)
++copy the existing binary to 'qmail-smtpd.old' and copy the new binary from the
++source directory to 'qmail-smtpd'.
++(ex. cp qmail-smtpd qmail-smtpd.old && cp ~/qmail-1.03/qmail-smtpd qmail-smtpd)
++
++You can also optionally just run "make setup check" as it will install the
++updated documentation and man pages provided with this patch. Stopping qmail
++before doing the "make setup check" is always a good idea.
++
++
++LOGGING:
++
++qregex will log matches to the patterns in the various control files. Log
++messages will take these three forms depending on which control file was
++matched:
++
++badhelo
++qmail-smtpd: badhelo: <host> at <remote IP>
++
++badmailfrom and badmailfromnorelay
++qmail-smtpd: badmailfrom: <sender address> at <remote IP>
++
++badmailto and badmailtonorelay
++qmail-smtpd: badmailto: <rcpt address> at <remote IP>
++
++When the LOGREGEX environment variable is set, the matched pattern will
++be included in the log. Log messages will have the regex pattern appended
++to them. For example, a badhelo log message will look like this:
++
++qmail-smtpd: badhelo: <host> at <remote IP> matches pattern: <regex>
++
++
++CONTROL FILES:
++
++qregex provides you with five control files. None of these control files
++is mandatory and you can use them in any combination you choose in your setup.
++
++The "control/badmailfrom" and "control/badmailto" files contain your REs for
++matching against the 'mail from' (envelope sender) and 'rcpt to' (envelope
++recipient) smtp commands respectively.
++The "control/badmailfromnorelay" and "control/badmailtonorelay" match against
++the same commands but are read only when the RELAYCLIENT environment variable
++is not set.
++The "control/badhelo" file matches against the 'helo/ehlo' smtp command.
++
++If you prefer you can symlink the badmailfrom and badmailto control files
++(ln -s badmailfrom badmailto) and maintain fewer sets of rules. Beware
++this might cause problems in certain setups.
++        
++	Here's an example "badhelo" file.
++	-----------------------------------
++	# block host strings with no dot (not a FQDN)
++	!\.
++	-----------------------------------
++	
++	An example "badmailfrom" file.
++	-----------------------------------
++	# this will drop everything containing the string
++	# bad.domain.com or Bad.Domain.Com or BAD.domain.COM
++	bad\.domain\.com
++	# force users to fully qualify themselves
++	# (i.e. deny "user", accept "user@domain")
++	!@
++	-----------------------------------
++
++	And "badmailto" (a little more interesting)
++	-----------------------------------
++	# must not contain invalid characters, brakets or multiple @'s
++	[!%#:*^(){}]
++	@.*@
++	-----------------------------------
++
++You can use the non-RE character '!' to start an RE as a signal to qregex to
++negate the action. As used above in the badmailfrom file, by negating the '@'
++symbol qregex will signal qmail-smtpd to deny the 'mail from' command whenever
++the address doesn't contain an @ symbol. When used inside a bracket expression,
++the '!' character looses this special meaning. This is shown in the badmailto
++example.
++
++The norelay control files follow the same rules as the other control files but
++are intended to address two specific scenarios.
++The badmailfromnorelay file can be used to block mail trying to spoof a domain
++hosted on your mail server. It prevents a mail client that is not allowed to
++relay email through your server from using one of your hosted domains as its
++envelope sender.
++The badmailtonorelay file can be used to create email addresses that cannot
++receive mail from any source not allowed to relay email through your server.
++This is handy for creating email addresses for use only within your own 
++domain(s) that can't receive spam from the world at large.
++
++
++INTERNALS:
++
++qregex (or regexmatch as the function is called) will be called during the
++`helo/ehlo`, `rcpt to` and `mail from` handling routines in "qmail-smtpd.c".
++When called, it will read the proper control file then one by one compile and
++execute the regex on the string passed into qmail-smtpd. If the regex matches
++it returns TRUE (1) and the qmail-smtpd process will deny the user the ability
++to continue. If you change anything and think it betters this patch please
++send me a new diff file so I can take a peek.
++
++
++CONTACT:
++qregex is maintained by:
++	Andrew St. Jean
++	andrew@arda.homeunix.net
++	www.arda.homeunix.net/store/qmail/
++
++Contributers to qregex:
++	Jeremy Kitchen	
++	kitchen at scriptkitchen dot com
++	http://www.scriptkitchen.com/qmail
++
++	Alex Pleiner
++	alex@zeitform.de
++	zeitform Internet Dienste
++	http://www.zeitform.de/
++
++	Thanos Massias
++
++Original qregex patch written by:
++	Evan Borgstrom
++	evan at unixpimps dot org
+diff -Nur qmail-1.03-9/TARGETS qmail-1.03-10/TARGETS
+--- qmail-1.03-9/TARGETS	2018-07-04 12:42:44.683217796 -0600
++++ qmail-1.03-10/TARGETS	2018-07-04 13:00:33.837416623 -0600
+@@ -269,6 +269,7 @@
+ qmail-qmtpd
+ qmail-smtpd.o
+ qmail-smtpd
++qregex.o
+ sendmail.o
+ sendmail
+ tcp-env.o

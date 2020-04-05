@@ -1,0 +1,19 @@
+--- orig/qmail-remote.c	1998-06-15 12:53:16.000000000 +0200
++++ qmail-1.03/qmail-remote.c	2005-02-20 22:03:50.000000000 +0100
+@@ -201,6 +201,16 @@ void blast()
+     if (ch == '.')
+       substdio_put(&smtpto,".",1);
+     while (ch != '\n') {
++      if (ch == '\r') {
++	r = substdio_get(&ssin, &ch, 1);
++	if (r == 0)
++		break;
++	if (r == -1) temp_read();
++	if (ch != '\n') {
++		substdio_put(&smtpto, "\r\n", 2);
++	} else
++		break;
++      }
+       substdio_put(&smtpto,&ch,1);
+       r = substdio_get(&ssin,&ch,1);
+       if (r == 0) perm_partialline();

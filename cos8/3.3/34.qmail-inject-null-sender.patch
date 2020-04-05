@@ -1,0 +1,13 @@
+--- qmail-inject.c 1998-06-15 12:53:16.000000000 +0200
++++ ../../qmail-1.03/qmail-inject.c 2010-11-30 09:09:46.848680000 +0100
+@@ -269,6 +269,10 @@
+ token822_alloc *addr;
+ {
+  if (!addr->len) return; /* don't rewrite <> */
++ if (addr->len == 1 && str_equal(addr->t[0].s,"<>")) {
++ addr->len = 0;
++ return;
++ }
+  if (addr->len >= 2)
+    if (addr->t[1].type == TOKEN822_AT)
+      if (addr->t[0].type == TOKEN822_LITERAL)
