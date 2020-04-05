@@ -1,0 +1,2861 @@
+diff -Nuar qmail-1.03-3.1/CHANGES.spamthrottle qmail-1.03-3.2/CHANGES.spamthrottle
+--- qmail-1.03-3.1/CHANGES.spamthrottle	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/CHANGES.spamthrottle	2019-09-01 12:43:45.733347579 -0600
+@@ -0,0 +1,79 @@
++20021231 do spam dir existence checks first (more likely case) {dw}
++         update/fix man page(s) {dw}
++         public release 2.01
++
++20021230 minor fixes/tweaking {dw}
++
++20021228 finish testing {dw}
++
++20021226 further testing, code clean up {dw}
++         update documentation and qmail-showctl {dw}
++         write timeout code (so we don't keep sleeping if
++           other end closes) using getpeername() {dw}
++
++20021129 finish initial testing of new control structure {dw}
++
++22021016 rewrite parameter input via cdb-style control file rather
++           than via multiple control files + environment variables {dw}
++         the cdb file allows IP/network keys with network masks (/bits format) {dw}
++         no intention of legacy support at the moment as moving environment
++           variables from tcprule-style files to the spam cdb file is simple
++           and the default values in the control files are intended to be
++           placed as a single entry in the spam cdb file {dw}
++         had to add -Hhl options (stolen from existing djb code) to tcp-env.c
++           to make it actually useful (spamt relies on TCPREMOTEIP being set) {dw}
++
++20020226 documentation says spamthrottlercpt defaults to 0, but it wasn't
++           (fixed code to match documentation)
++         obviously the non-libtai time code hasn't been tested since
++         it was rewritten:
++           time_sub() calculated t2-t1 (should be t1-t2)
++           time_pack() didn't preserve usec's leading zeroes (added fmt_ulong0())
++           reading times from an empty file resulted in a crash
++         added spam.h dependencies in Makefile
++         public release 1.03
++
++20020219 forgot to flush continuation lines in teergrube code
++         public release 1.02
++
++20020219 fix time(tai)-related bugs in reading/writing taia values
++           (thanks to Roland Chan)
++         add entry to qmail-spamthrottle(9) man page with a simple perl
++           expression to convert packed taia values to tai64n timestamps
++         public release 1.01
++
++20020218 add teergrube support (now 1.01 release) {dw}
++         remove all strerr_warn... calls as they cause problems
++           with qmail's sendmail and the -bs switch (as used by pine
++           for instance)
++         remove dead/redundant code {dw}
++
++20020213 public release 1.00 {dw,jl,mk}
++
++20011224 fix fpe error
++
++20011213 release 1.00 candidate complete
++
++20010923 new formulation, code restructure, man pages updated
++
++20010319 spam wrap open/lock calls
++
++20010313 wrap tai handlers so tai isn't required
++
++20010311 remove an extra CRLF in EHLO response
++         short circuit when sleep time would be zero
++
++20010309 RFC 2920 compliance (don't advertise PIPELINING with stflush on)
++         add fcntl() style lock module for compatibility
++         make new control functions return values
++         lock file is separate from time/wait files
++
++20010227 update man pages with spamthrottle info
++         add spamthrottleflush/spamthrottlemax support
++         add warning in readme about libtai dependency
++
++20010221 remove testing code
++         add spamthrottledir support (so IPs can be grouped)
++           (the '.' means new subdir semantic still enforced though)
++
++20010220 alpha implementation
+diff -Nuar qmail-1.03-3.1/control.c qmail-1.03-3.2/control.c
+--- qmail-1.03-3.1/control.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/control.c	2019-09-01 12:43:45.734347581 -0600
+@@ -7,8 +7,10 @@
+ #include "control.h"
+ #include "alloc.h"
+ #include "scan.h"
++#include "fmt.h"
+ 
+ static char inbuf[64];
++static char outbuf[64];
+ static stralloc line = {0};
+ static stralloc me = {0};
+ static int meok = 0;
+@@ -128,3 +130,25 @@
+  close(fd);
+  return -1;
+ }
++
++
++int control_writeint(i,fn)
++int *i;
++char *fn;
++{
++ substdio ss;
++ int fd;
++ char num[FMT_ULONG];
++
++ fd = open_write(fn);
++ if (fd == -1) { if (errno == error_noent) return 0; return -1; }
++ 
++ substdio_fdbuf(&ss,write,fd,outbuf,sizeof(outbuf));
++
++ substdio_putflush(&ss,num,fmt_ulong(num,*i));
++ substdio_putsflush(&ss,"\n");
++
++ close(fd);
++
++ return 1;
++}
+diff -Nuar qmail-1.03-3.1/control.h qmail-1.03-3.2/control.h
+--- qmail-1.03-3.1/control.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/control.h	2019-09-01 12:43:45.734347581 -0600
+@@ -6,5 +6,9 @@
+ extern int control_rldef();
+ extern int control_readint();
+ extern int control_readfile();
++extern int control_writeint();
++
++extern int control_readtime();
++extern int control_writetime();
+ 
+ #endif
+diff -Nuar qmail-1.03-3.1/control_time.c qmail-1.03-3.2/control_time.c
+--- qmail-1.03-3.1/control_time.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/control_time.c	2019-09-01 12:43:45.735347582 -0600
+@@ -0,0 +1,62 @@
++#include "readwrite.h"
++#include "open.h"
++#include "stralloc.h"
++#include "substdio.h"
++#include "error.h"
++#include "control.h"
++#include "alloc.h"
++#include "time.h"
++
++static char inbuf[64];
++static char outbuf[64];
++
++
++int control_readtime(t,fn)
++struct q_time_t *t;
++char *fn;
++{
++ stralloc sa = { 0 };
++ substdio ss;
++ int fd;
++ char tb;
++
++ fd = open_read(fn);
++ if (fd == -1) { if (errno == error_noent) return 0; return -1; }
++
++ substdio_fdbuf(&ss,read,fd,inbuf,sizeof(inbuf));
++
++ for (;;)
++  {
++   if (substdio_get(&ss,&tb,1) <= 0) break;
++   if (!stralloc_append(&sa,&tb)) return -1; 
++  }
++
++ if ((!Q_TIME_PACK && sa.len) || (Q_TIME_PACK && sa.len == Q_TIME_PACK))
++  {
++   time_unpack(sa.s,t);
++  }
++
++ close(fd);
++ return 1;
++}
++
++
++int control_writetime(t,fn)
++struct q_time_t *t;
++char *fn;
++{
++ stralloc sa = { 0 };
++ substdio ss;
++ int fd;
++
++ fd = open_write(fn);
++ if (fd == -1) { if (errno == error_noent) return 0; return -1; }
++ 
++ substdio_fdbuf(&ss,write,fd,outbuf,sizeof(outbuf));
++
++ time_pack(&sa,t);
++ substdio_putflush(&ss,sa.s,sa.len);
++
++ close(fd);
++ return 1;
++}
+diff -Nuar qmail-1.03-3.1/FILES qmail-1.03-3.2/FILES
+--- qmail-1.03-3.1/FILES	2019-09-01 12:25:29.715536543 -0600
++++ qmail-1.03-3.2/FILES	2019-09-01 12:43:45.733347579 -0600
+@@ -440,3 +440,25 @@
+ constmap.h
+ constmap.c
+ qmail-todo.c
++README.spamthrottle
++CHANGES.spamthrottle
++OTHERS.spamthrottle
++fmt_2long.c
++fmt_2long0.c
++fmt_ulong0.c
++time.c
++time.h
++control_time.c
++lock_exfcntl.c
++lock_unfcntl.c
++spam.c
++spam.h
++spam_get.c
++tryltai.c
++trytai.c
++open_rw.c
++qmail-newst.c
++qmail-newst.9
++qmail-spamt.9
++qmail-spamthrottle.9
++scan_2long.c
+diff -Nuar qmail-1.03-3.1/fmt_2long0.c qmail-1.03-3.2/fmt_2long0.c
+--- qmail-1.03-3.1/fmt_2long0.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/fmt_2long0.c	2019-09-01 12:43:45.735347582 -0600
+@@ -0,0 +1,10 @@
++#include "fmt.h"
++
++unsigned int fmt_2long0(s,u,n) char *s; unsigned long u; unsigned int n;
++{
++  unsigned int len;
++  len = fmt_2long(FMT_LEN,u);
++  while (len < n) { if (s) *s++ = '0'; ++len; }
++  if (s) fmt_2long(s,u);
++  return len;
++}
+diff -Nuar qmail-1.03-3.1/fmt_2long.c qmail-1.03-3.2/fmt_2long.c
+--- qmail-1.03-3.1/fmt_2long.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/fmt_2long.c	2019-09-01 12:43:45.735347582 -0600
+@@ -0,0 +1,13 @@
++#include "fmt.h"
++
++unsigned int fmt_2long(s,u) register char *s; register unsigned long u;
++{
++  register unsigned int len; register unsigned long q;
++  len = 1; q = u;
++  while (q > 1) { ++len; q /= 2; }
++  if (s) {
++    s += len;
++    do { *--s = '0' + (u % 2); u >>= 1; } while(u); /* handles u == 0 */
++  }
++  return len;
++}
+diff -Nuar qmail-1.03-3.1/fmt.h qmail-1.03-3.2/fmt.h
+--- qmail-1.03-3.1/fmt.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/fmt.h	2019-09-01 12:43:45.735347582 -0600
+@@ -2,6 +2,7 @@
+ #define FMT_H
+ 
+ #define FMT_ULONG 40 /* enough space to hold 2^128 - 1 in decimal, plus \0 */
++#define FMT_2LONG 129 /* same, but in binary */
+ #define FMT_LEN ((char *) 0) /* convenient abbreviation */
+ 
+ extern unsigned int fmt_uint();
+@@ -12,8 +13,11 @@
+ extern unsigned int fmt_xshort();
+ extern unsigned int fmt_nbbshort();
+ extern unsigned int fmt_ulong();
++extern unsigned int fmt_ulong0();
+ extern unsigned int fmt_xlong();
+ extern unsigned int fmt_nbblong();
++extern unsigned int fmt_2long();
++extern unsigned int fmt_2long0();
+ 
+ extern unsigned int fmt_plusminus();
+ extern unsigned int fmt_minus();
+diff -Nuar qmail-1.03-3.1/fmt_ulong0.c qmail-1.03-3.2/fmt_ulong0.c
+--- qmail-1.03-3.1/fmt_ulong0.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/fmt_ulong0.c	2019-09-01 12:43:45.735347582 -0600
+@@ -0,0 +1,10 @@
++#include "fmt.h"
++
++unsigned int fmt_ulong0(s,u,n) char *s; unsigned long u; unsigned int n;
++{
++  unsigned int len;
++  len = fmt_ulong(FMT_LEN,u);
++  while (len < n) { if (s) *s++ = '0'; ++len; }
++  if (s) fmt_ulong(s,u);
++  return len;
++}
+diff -Nuar qmail-1.03-3.1/hier.c qmail-1.03-3.2/hier.c
+--- qmail-1.03-3.1/hier.c	2019-09-01 12:25:29.715536543 -0600
++++ qmail-1.03-3.2/hier.c	2019-09-01 12:43:45.735347582 -0600
+@@ -47,6 +47,7 @@
+   d(auto_qmail,"man/man8",auto_uido,auto_gidq,0755);
+ 
+   d(auto_qmail,"alias",auto_uida,auto_gidq,02755);
++  d(auto_qmail,"spam",auto_uidd,auto_gidn,02700);
+ 
+   d(auto_qmail,"queue",auto_uidq,auto_gidq,0750);
+   d(auto_qmail,"queue/pid",auto_uidq,auto_gidq,0700);
+@@ -113,6 +114,7 @@
+   c(auto_qmail,"bin","qmail-todo",auto_uido,auto_gidq,0711);
+ #endif
+   c(auto_qmail,"bin","splogger",auto_uido,auto_gidq,0711);
++  c(auto_qmail,"bin","qmail-newst",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-newu",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-badmimetypes",auto_uido,auto_gidq,0700);
+   c(auto_qmail,"bin","qmail-badloadertypes",auto_uido,auto_gidq,0700);
+@@ -174,6 +176,10 @@
+   c(auto_qmail,"man/cat5","qmail-users.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man5","tcp-environ.5",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat5","tcp-environ.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man5","qmail-spamt.5",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat5","qmail-spamt.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man5","qmail-spamthrottle.5",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat5","qmail-spamthrottle.0",auto_uido,auto_gidq,0644);
+ 
+   c(auto_qmail,"man/man7","forgeries.7",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat7","forgeries.0",auto_uido,auto_gidq,0644);
+@@ -237,6 +243,8 @@
+   c(auto_qmail,"man/cat8","qmail-badloadertypes.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newmrh.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-newmrh.0",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/man8","qmail-newst.8",auto_uido,auto_gidq,0644);
++  c(auto_qmail,"man/cat8","qmail-newst.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-newu.8",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/cat8","qmail-newu.0",auto_uido,auto_gidq,0644);
+   c(auto_qmail,"man/man8","qmail-pw2u.8",auto_uido,auto_gidq,0644);
+diff -Nuar qmail-1.03-3.1/ip.c qmail-1.03-3.2/ip.c
+--- qmail-1.03-3.1/ip.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/ip.c	2019-09-01 12:43:45.736347583 -0600
+@@ -1,6 +1,7 @@
+ #include "fmt.h"
+ #include "scan.h"
+ #include "ip.h"
++#include "byte.h"
+ 
+ unsigned int ip_fmt(s,ip)
+ char *s;
+@@ -20,6 +21,44 @@
+   return len;
+ }
+ 
++unsigned int fmt_ipn(s,ip,n)
++char *s;
++struct ip_address *ip;
++unsigned int n;
++{
++  struct ip_address ipn;
++  unsigned long uip = 0;
++
++  uip += ip->d[0]; uip <<= 8;
++  uip += ip->d[1]; uip <<= 8;
++  uip += ip->d[2]; uip <<= 8;
++  uip += ip->d[3];
++
++  uip &= ~((1<<(32-n))-1);
++
++  ipn.d[3] = uip & 0xff; uip >>= 8;
++  ipn.d[2] = uip & 0xff; uip >>= 8;
++  ipn.d[1] = uip & 0xff; uip >>= 8;
++  ipn.d[0] = uip;
++
++  return ip_fmt(s,&ipn);
++}
++
++unsigned int fmt_2ip0(s,ip)
++char *s;
++struct ip_address *ip;
++{
++  unsigned long uip = 0;
++
++  uip += ip->d[0]; uip <<= 8;
++  uip += ip->d[1]; uip <<= 8;
++  uip += ip->d[2]; uip <<= 8;
++  uip += ip->d[3];
++
++  return fmt_2long0(s,uip,32);
++}
++
++
+ unsigned int ip_scan(s,ip)
+ char *s;
+ struct ip_address *ip;
+diff -Nuar qmail-1.03-3.1/ip.h qmail-1.03-3.2/ip.h
+--- qmail-1.03-3.1/ip.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/ip.h	2019-09-01 12:43:45.736347583 -0600
+@@ -4,7 +4,10 @@
+ struct ip_address { unsigned char d[4]; } ;
+ 
+ extern unsigned int ip_fmt();
++extern unsigned int fmt_ipn();		/* to n-bit masked ip address */
++extern unsigned int fmt_2ip0();		/* to a binary string with leading zeroes */
+ #define IPFMT 19
++#define FMT_2IP 33
+ extern unsigned int ip_scan();
+ extern unsigned int ip_scanbracket();
+ 
+diff -Nuar qmail-1.03-3.1/lock_exfcntl.c qmail-1.03-3.2/lock_exfcntl.c
+--- qmail-1.03-3.1/lock_exfcntl.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/lock_exfcntl.c	2019-09-01 12:43:45.736347583 -0600
+@@ -0,0 +1,16 @@
++#include <unistd.h>
++#include <fcntl.h>
++#include "lock.h"
++
++int lock_exfcntl(fd)
++int fd;
++{
++  struct flock fl;
++
++  fl.l_type = F_WRLCK;
++  fl.l_whence = SEEK_SET;
++  fl.l_start = 0;
++  fl.l_len = 0;
++
++  return fcntl(fd,F_SETLKW,&fl);
++}
+diff -Nuar qmail-1.03-3.1/lock.h qmail-1.03-3.2/lock.h
+--- qmail-1.03-3.1/lock.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/lock.h	2019-09-01 12:43:45.736347583 -0600
+@@ -5,4 +5,7 @@
+ extern int lock_un();
+ extern int lock_exnb();
+ 
++extern int lock_exfcntl();
++extern int lock_unfcntl();
++
+ #endif
+diff -Nuar qmail-1.03-3.1/lock_unfcntl.c qmail-1.03-3.2/lock_unfcntl.c
+--- qmail-1.03-3.1/lock_unfcntl.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/lock_unfcntl.c	2019-09-01 12:43:45.736347583 -0600
+@@ -0,0 +1,16 @@
++#include <unistd.h>
++#include <fcntl.h>
++#include "lock.h"
++
++int lock_unfcntl(fd)
++int fd;
++{
++  struct flock fl;
++
++  fl.l_type = F_UNLCK;
++  fl.l_whence = SEEK_SET;
++  fl.l_start = 0;
++  fl.l_len = 0;
++
++  return fcntl(fd,F_SETLKW,&fl);
++}
+diff -Nuar qmail-1.03-3.1/Makefile qmail-1.03-3.2/Makefile
+--- qmail-1.03-3.1/Makefile	2019-09-01 12:25:29.716536544 -0600
++++ qmail-1.03-3.2/Makefile	2019-09-01 12:43:45.734347581 -0600
+@@ -394,9 +394,14 @@
+ 
+ control.o: \
+ compile control.c readwrite.h open.h getln.h stralloc.h gen_alloc.h \
+-substdio.h error.h control.h alloc.h scan.h
++substdio.h error.h control.h alloc.h scan.h fmt.h
+ 	./compile control.c
+ 
++control_time.o: \
++compile control_time.c readwrite.h open.h stralloc.h gen_alloc.h \
++substdio.h error.h control.h alloc.h time.h hastai.h
++	./compile control_time.c
++
+ date822fmt.o: \
+ compile date822fmt.c datetime.h fmt.h date822fmt.h
+ 	./compile date822fmt.c
+@@ -605,6 +610,14 @@
+ 	cat auto-ccld.sh find-systype.sh > find-systype
+ 	chmod 755 find-systype
+ 
++fmt_2long.o: \
++compile fmt_2long.c fmt.h
++	./compile fmt_2long.c
++
++fmt_2long0.o: \
++compile fmt_2long0.c fmt.h
++	./compile fmt_2long0.c
++
+ fmt_str.o: \
+ compile fmt_str.c fmt.h
+ 	./compile fmt_str.c
+@@ -625,6 +638,10 @@
+ compile fmt_ulong.c fmt.h
+ 	./compile fmt_ulong.c
+ 
++fmt_ulong0.o: \
++compile fmt_ulong0.c fmt.h
++	./compile fmt_ulong0.c
++
+ fmtqfn.o: \
+ compile fmtqfn.c fmtqfn.h fmt.h auto_split.h
+ 	./compile fmtqfn.c
+@@ -659,10 +676,11 @@
+ 	./compile forward.c
+ 
+ fs.a: \
+-makelib fmt_str.o fmt_strn.o fmt_uint.o fmt_uint0.o fmt_ulong.o \
+-scan_ulong.o scan_8long.o
+-	./makelib fs.a fmt_str.o fmt_strn.o fmt_uint.o fmt_uint0.o \
+-	fmt_ulong.o scan_ulong.o scan_8long.o
++makelib fmt_2long.o fmt_2long0.o fmt_str.o fmt_strn.o fmt_uint.o fmt_uint0.o \
++fmt_ulong.o fmt_ulong0.o scan_ulong.o scan_2long.o scan_8long.o
++	./makelib fs.a fmt_2long.o fmt_2long0.o fmt_str.o fmt_strn.o \
++	fmt_uint.o fmt_uint0.o fmt_ulong.o fmt_ulong0.o scan_ulong.o \
++	scan_2long.o scan_8long.o
+ 
+ getln.a: \
+ makelib getln.o getln2.o
+@@ -736,6 +754,13 @@
+ 	hasshsgr.h
+ 	rm -f tryshsgr.o tryshsgr
+ 
++hastai.h: \
++trytai.c compile load
++	( ( ./compile trytai.c && ./load trytai -ltai ) >/dev/null \
++	2>&1 \
++	&& echo \#define HASTAI 1 || exit 0 ) > hastai.h
++	rm -f trytai.o trytai
++
+ haswaitp.h: \
+ trywaitp.c compile load
+ 	( ( ./compile trywaitp.c && ./load trywaitp ) >/dev/null \
+@@ -851,7 +876,7 @@
+ it: \
+ qmail-local qmail-lspawn qmail-getpw qmail-remote qmail-rspawn \
+ qmail-clean qmail-send qmail-start splogger qmail-queue qmail-inject \
+-predate datemail mailsubj qmail-upq qmail-showctl qmail-newu \
++predate datemail mailsubj qmail-upq qmail-showctl qmail-newst qmail-newu \
+ qmail-pw2u qmail-qread qmail-qstat qmail-tcpto qmail-tcpok \
+ qmail-pop3d qmail-popup qmail-qmqpc qmail-qmqpd qmail-qmtpd \
+ qmail-badmimetypes qmail-badloadertypes \
+@@ -868,8 +893,8 @@
+ 	chmod 755 load
+ 
+ lock.a: \
+-makelib lock_ex.o lock_exnb.o lock_un.o
+-	./makelib lock.a lock_ex.o lock_exnb.o lock_un.o
++makelib lock_ex.o lock_exnb.o lock_un.o lock_exfcntl.o lock_unfcntl.o
++	./makelib lock.a lock_ex.o lock_exnb.o lock_un.o lock_exfcntl.o lock_unfcntl.o
+ 
+ lock_ex.o: \
+ compile lock_ex.c hasflock.h lock.h
+@@ -883,6 +908,14 @@
+ compile lock_un.c hasflock.h lock.h
+ 	./compile lock_un.c
+ 
++lock_exfcntl.o: \
++compile lock_exfcntl.c lock.h
++	./compile lock_exfcntl.c
++
++lock_unfcntl.o: \
++compile lock_unfcntl.c lock.h
++	./compile lock_unfcntl.c
++
+ maildir.0: \
+ maildir.5
+ 	nroff -man maildir.5 > maildir.0
+@@ -1012,7 +1045,7 @@
+ qmail-local.0 qmail-lspawn.0 qmail-getpw.0 qmail-remote.0 \
+ qmail-rspawn.0 qmail-clean.0 qmail-send.0 qmail-start.0 splogger.0 \
+ qmail-badmimetypes.0 qmail-badloadertypes.0 \
+-qmail-queue.0 qmail-inject.0 mailsubj.0 qmail-showctl.0 qmail-newu.0 \
++qmail-queue.0 qmail-inject.0 mailsubj.0 qmail-showctl.0 qmail-newst.0 qmail-newu.0 \
+ qmail-pw2u.0 qmail-qread.0 qmail-qstat.0 qmail-tcpto.0 qmail-tcpok.0 \
+ qmail-pop3d.0 qmail-popup.0 qmail-qmqpc.0 qmail-qmqpd.0 qmail-qmtpd.0 \
+ qmail-smtpd.0 tcp-env.0 qmail-newmrh.0 qreceipt.0 qbiff.0 forward.0 \
+@@ -1020,7 +1053,7 @@
+ maildir2mbox.0 maildirwatch.0 qmail.0 qmail-limits.0 qmail-log.0 \
+ qmail-control.0 qmail-header.0 qmail-users.0 dot-qmail.0 \
+ qmail-command.0 tcp-environ.0 maildir.0 mbox.0 addresses.0 \
+-envelopes.0 forgeries.0
++envelopes.0 forgeries.0 qmail-spamt.0 qmail-spamthrottle.0
+ 
+ mbox.0: \
+ mbox.5
+@@ -1053,9 +1086,9 @@
+ 
+ open.a: \
+ makelib open_append.o open_excl.o open_read.o open_trunc.o \
+-open_write.o
++open_write.o open_rw.o
+ 	./makelib open.a open_append.o open_excl.o open_read.o \
+-	open_trunc.o open_write.o
++	open_trunc.o open_write.o open_rw.o
+ 
+ open_append.o: \
+ compile open_append.c open.h
+@@ -1069,6 +1102,10 @@
+ compile open_read.c open.h
+ 	./compile open_read.c
+ 
++open_rw.o: \
++compile open_rw.c open.h
++	./compile open_rw.c
++
+ open_trunc.o: \
+ compile open_trunc.c open.h
+ 	./compile open_trunc.c
+@@ -1380,6 +1417,31 @@
+ uint32.h substdio.h
+ 	./compile qmail-newmrh.c
+ 
++qmail-newst: \
++load qmail-newst.o cdbmss.o ip.o getln.a open.a seek.a cdbmake.a case.a \
++stralloc.a alloc.a substdio.a error.a str.a fs.a auto_qmail.o
++	./load qmail-newst cdbmss.o ip.o getln.a open.a seek.a cdbmake.a \
++	case.a stralloc.a alloc.a substdio.a error.a str.a fs.a \
++	auto_qmail.o
++
++qmail-newst.0: \
++qmail-newst.8
++	nroff -man qmail-newst.8 > qmail-newst.0
++
++qmail-newst.8: \
++qmail-newst.9 conf-break conf-spawn
++	cat qmail-newst.9 \
++	| sed s}QMAILHOME}"`head -1 conf-qmail`"}g \
++	| sed s}BREAK}"`head -1 conf-break`"}g \
++	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
++	> qmail-newst.8
++
++qmail-newst.o: \
++compile qmail-newst.c stralloc.h gen_alloc.h subfd.h substdio.h \
++getln.h substdio.h cdbmss.h cdbmake.h uint32.h substdio.h exit.h \
++readwrite.h open.h error.h case.h ip.h fmt.h auto_qmail.h
++	./compile qmail-newst.c
++
+ qmail-newu: \
+ load qmail-newu.o cdbmss.o getln.a open.a seek.a cdbmake.a case.a \
+ stralloc.a alloc.a substdio.a error.a str.a auto_qmail.o
+@@ -1659,10 +1721,10 @@
+ 
+ qmail-showctl: \
+ load qmail-showctl.o auto_uids.o control.o open.a getln.a stralloc.a \
+-alloc.a substdio.a error.a str.a fs.a auto_qmail.o auto_break.o \
++alloc.a substdio.a error.a str.a fs.a spam_get.o cdb.a auto_qmail.o auto_break.o \
+ auto_patrn.o auto_spawn.o auto_split.o
+ 	./load qmail-showctl auto_uids.o control.o open.a getln.a \
+-	stralloc.a alloc.a substdio.a error.a str.a fs.a \
++	stralloc.a alloc.a substdio.a error.a str.a fs.a spam_get.o cdb.a \
+ 	auto_qmail.o auto_break.o auto_patrn.o auto_spawn.o \
+ 	auto_split.o 
+ 
+@@ -1679,17 +1741,18 @@
+ 
+ qmail-smtpd: \
+ load qmail-smtpd.o rcpthosts.o qregex.o commands.o timeoutread.o \
+-timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o constmap.o \
+-received.o date822fmt.o now.o qmail.o spf.o dns.o cdb.a fd.a wait.a \
++timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o control_time.o time.o constmap.o \
++received.o date822fmt.o now.o qmail.o spf.o dns.o spam.o spam_get.o cdb.a fd.a wait.a \
+ datetime.a getln.a open.a sig.a case.a env.a stralloc.a alloc.a strerr.a substdio.a \
+-error.a str.a fs.a auto_qmail.o base64.o policy.o socket.lib $(SMTPD_CHKUSER_OBJ) dns.lib
+-	./load qmail-smtpd qregex.o $(SMTPD_CHKUSER_OBJ) rcpthosts.o commands.o timeoutread.o \
+-	timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o constmap.o \
+-	tls.o ssl_timeoutio.o ndelay.a -L/usr/lib64 -lssl -lcrypto \
+-	received.o date822fmt.o now.o qmail.o spf.o dns.o cdb.a fd.a wait.a \
+-	datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
+-	alloc.a strerr.a substdio.a error.a fs.a auto_qmail.o str.a policy.o \
+-	base64.o `cat socket.lib` $(VPOPMAIL_LIBS) `cat dns.lib`
++error.a str.a fs.a auto_qmail.o base64.o policy.o auto_uids.o socket.lib tai.lib lock.a \
++$(SMTPD_CHKUSER_OBJ) dns.lib
++	./load qmail-smtpd qregex.o $(SMTPD_CHKUSER_OBJ) rcpthosts.o commands.o timeoutread.o \
++        timeoutwrite.o ip.o ipme.o ipalloc.o strsalloc.o control.o control_time.o time.o constmap.o \
++        tls.o ssl_timeoutio.o ndelay.a -L/usr/lib64 -lssl -lcrypto \
++        received.o date822fmt.o now.o qmail.o spam.o spam_get.o spf.o dns.o cdb.a fd.a wait.a \
++        datetime.a getln.a open.a sig.a case.a env.a stralloc.a \
++        alloc.a strerr.a substdio.a error.a fs.a auto_qmail.o str.a policy.o \
++        base64.o auto_uids.o `cat socket.lib tai.lib` lock.a $(VPOPMAIL_LIBS) `cat dns.lib`
+ 
+ qmail-smtpd.0: \
+ qmail-smtpd.8
+@@ -1700,9 +1763,33 @@
+ substdio.h alloc.h auto_qmail.h control.h received.h constmap.h \
+ error.h ipme.h ip.h ipalloc.h strsalloc.h ip.h gen_alloc.h ip.h qmail.h \
+ substdio.h str.h fmt.h scan.h byte.h case.h env.h now.h datetime.h \
+-exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h base64.h spf.h
++exit.h rcpthosts.h timeoutread.h timeoutwrite.h commands.h base64.h spf.h spam.h
+ 	./compile qmail-smtpd.c
+ 
++qmail-spamt.0: \
++qmail-spamt.5
++	nroff -man qmail-spamt.5 > qmail-spamt.0
++
++qmail-spamt.5: \
++qmail-spamt.9 conf-break conf-spawn
++	cat qmail-spamt.9 \
++	| sed s}QMAILHOME}"`head -1 conf-qmail`"}g \
++	| sed s}BREAK}"`head -1 conf-break`"}g \
++	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
++	> qmail-spamt.5
++
++qmail-spamthrottle.0: \
++qmail-spamthrottle.5
++	nroff -man qmail-spamthrottle.5 > qmail-spamthrottle.0
++
++qmail-spamthrottle.5: \
++qmail-spamthrottle.9 conf-break conf-spawn
++	cat qmail-spamthrottle.9 \
++	| sed s}QMAILHOME}"`head -1 conf-qmail`"}g \
++	| sed s}BREAK}"`head -1 conf-break`"}g \
++	| sed s}SPAWN}"`head -1 conf-spawn`"}g \
++	> qmail-spamthrottle.5
++
+ qmail-start: \
+ load qmail-start.o prot.o fd.a auto_uids.o
+ 	./load qmail-start prot.o fd.a auto_uids.o 
+@@ -1865,6 +1952,10 @@
+ timeoutread.h timeoutwrite.h remoteinfo.h
+ 	./compile remoteinfo.c
+ 
++scan_2long.o: \
++compile scan_2long.c scan.h
++	./compile scan_2long.c
++
+ scan_8long.o: \
+ compile scan_8long.c scan.h
+ 	./compile scan_8long.c
+@@ -1987,11 +2078,13 @@
+ byte_copy.c byte_cr.c byte_cspn.c byte_diff.c byte_rchr.c byte_rcspn.c \
+ byte_zero.c str.h spf.c spf.h spfquery.c \
+ str_chr.c str_cpy.c str_cpyb.c str_diff.c str_diffn.c str_len.c str_rchr.c \
+-str_start.c lock.h lock_ex.c lock_exnb.c lock_un.c tryflock.c getln.3 \
++str_start.c lock.h lock_ex.c lock_exnb.c lock_un.c lock_exfcntl.c \
++lock_unfcntl.c tryflock.c getln.3 \
+ getln.h getln.c getln2.3 getln2.c sgetopt.3 sgetopt.h sgetopt.c \
+ subgetopt.3 subgetopt.h subgetopt.c error.3 error_str.3 error_temp.3 \
+ error.h error.c error_str.c error_temp.c fmt.h fmt_str.c fmt_strn.c \
+-fmt_uint.c fmt_uint0.c fmt_ulong.c scan.h scan_ulong.c scan_8long.c \
++fmt_uint.c fmt_uint0.c fmt_ulong.c fmt_ulong0.c scan.h scan_ulong.c scan_2long.c \
++scan_8long.c \
+ slurpclose.h slurpclose.c quote.h quote.c hfield.h hfield.c \
+ headerbody.h headerbody.c token822.h token822.c control.h control.c \
+ datetime.3 datetime.h datetime.c datetime_un.c prioq.h prioq.c \
+@@ -2000,6 +2093,9 @@
+ ndelay_off.c direntry.3 direntry.h1 direntry.h2 trydrent.c prot.h \
+ prot.c chkshsgr.c warn-shsgr tryshsgr.c ipme.h ipme.c trysalen.c \
+ maildir.5 maildir.h maildir.c tcp-environ.5 constmap.h constmap.c \
++README.spamthrottle time.c time.h control_time.c lock_exfcntl.c \
++lock_unfcntl.c spam.c spam_get.c tryltai.c trytai.c open_rw.c qmail-spamt.9 \
++qmail-spamthrottle.9 \
+ update_tmprsadh
+ 	shar -m `cat FILES` > shar
+ 	chmod 400 shar
+@@ -2063,6 +2159,16 @@
+ 	&& echo -lsocket -lnsl || exit 0 ) > socket.lib
+ 	rm -f trylsock.o trylsock
+ 
++spam.o: \
++compile spam.c auto_uids.h lock.h stralloc.h gen_alloc.h control.h \
++open.h fmt.h timeoutread.h error.h time.h hastai.h ip.h env.h cdb.h \
++uint32.h spam.h substdio.h
++	./compile spam.c
++
++spam_get.o: \
++compile spam_get.c stralloc.h gen_alloc.h spam.h substdio.h
++	./compile spam_get.c
++
+ spawn.o: \
+ compile chkspawn spawn.c sig.h wait.h substdio.h byte.h str.h \
+ stralloc.h gen_alloc.h select.h exit.h alloc.h coe.h open.h error.h \
+@@ -2283,6 +2389,13 @@
+ find-systype trycpp.c
+ 	./find-systype > systype
+ 
++tai.lib: \
++tryltai.c compile load
++	( ( ./compile tryltai.c && \
++	./load tryltai -ltai ) >/dev/null 2>&1 \
++	&& echo -ltai || exit 0 ) > tai.lib
++	rm -f tryltai.o tryltai
++
+ tcp-env: \
+ load tcp-env.o dns.o remoteinfo.o timeoutread.o timeoutwrite.o \
+ timeoutconn.o ip.o ipalloc.o strsalloc.o case.a ndelay.a sig.a env.a \
+@@ -2314,6 +2427,10 @@
+ compile tcpto_clean.c tcpto.h open.h substdio.h readwrite.h
+ 	./compile tcpto_clean.c
+ 
++time.o: \
++compile time.c time.h stralloc.h gen_alloc.h fmt.h scan.h hastai.h
++	./compile time.c
++
+ timeoutconn.o: \
+ compile timeoutconn.c ndelay.h select.h error.h readwrite.h ip.h \
+ byte.h timeoutconn.h
+diff -Nuar qmail-1.03-3.1/open.h qmail-1.03-3.2/open.h
+--- qmail-1.03-3.1/open.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/open.h	2019-09-01 12:43:45.736347583 -0600
+@@ -6,5 +6,6 @@
+ extern int open_append();
+ extern int open_trunc();
+ extern int open_write();
++extern int open_rw();
+ 
+ #endif
+diff -Nuar qmail-1.03-3.1/open_rw.c qmail-1.03-3.2/open_rw.c
+--- qmail-1.03-3.1/open_rw.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/open_rw.c	2019-09-01 12:43:45.736347583 -0600
+@@ -0,0 +1,6 @@
++#include <sys/types.h>
++#include <fcntl.h>
++#include "open.h"
++
++int open_rw(fn) char *fn;
++{ return open(fn,O_RDWR | O_CREAT); }
+diff -Nuar qmail-1.03-3.1/OTHERS.spamthrottle qmail-1.03-3.2/OTHERS.spamthrottle
+--- qmail-1.03-3.1/OTHERS.spamthrottle	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/OTHERS.spamthrottle	2019-09-01 12:43:45.734347581 -0600
+@@ -0,0 +1,20 @@
++There are other (slightly) similar ideas:
++
++1: tarpitting with qmail-smtpd (using qmail MTA):
++    http://www.palomine.net/qmail/tarpit.html
++
++2: teergrubing:
++    http://www.iks-jena.de/mitarb/lutz/usenet/teergrube.en.html
++
++3: "spam throttling content filter" for Stalker CommuniGate Pro mail server:
++    http://www.cse.fau.edu/~valankar/CG_spam_filter/README
++
++4: rate limiting by host (using exim MTA):
++    http://www.exim.org/exim-html-4.10/doc/html/spec_13.html#IX981
++
++5: "recipient limits"/"slowing down bad clients" (using postfix MTA):
++    http://www.postfix.org/rate.html#recipients
++    http://www.postfix.org/rate.html#slowdown
++
++
++If you have additions/notes for this list, please let us know.
+diff -Nuar qmail-1.03-3.1/qmail-control.9 qmail-1.03-3.2/qmail-control.9
+--- qmail-1.03-3.1/qmail-control.9	2019-09-01 12:25:29.642536500 -0600
++++ qmail-1.03-3.2/qmail-control.9	2019-09-01 12:43:45.737347584 -0600
+@@ -79,6 +79,7 @@
+ .I servercert.pem	\fR(none)	\fRqmail-smtpd
+ .I smtpgreeting	\fIme	\fRqmail-smtpd
+ .I smtproutes	\fR(none)	\fRqmail-remote
++.I spamt	\fR(none)	\fRqmail-smtpd
+ .I taps	\fR(none)	\fRqmail-queue
+ .I spfbehavior	\fR0	\fRqmail-smtpd
+ .I spfexp	\fR(default)	\fRqmail-smtpd
+diff -Nuar qmail-1.03-3.1/qmail-newst.9 qmail-1.03-3.2/qmail-newst.9
+--- qmail-1.03-3.1/qmail-newst.9	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/qmail-newst.9	2019-09-01 12:43:45.737347584 -0600
+@@ -0,0 +1,47 @@
++.TH qmail-newst 8
++.SH NAME
++qmail-newst \- prepare spamthrottle parameters for qmail-smtpd
++.SH SYNOPSIS
++.B qmail-newst
++.SH DESCRIPTION
++.B qmail-newst
++reads the spamthrottle parameters in
++.B QMAILHOME/control/spamt
++and writes them into
++.B QMAILHOME/control/spamt.cdb
++in a binary format suited
++for quick access by
++.BR qmail-smtpd .
++
++If there is a problem with
++.BR control/spamt ,
++.B qmail-newst
++complains and leaves
++.B control/spamt.cdb
++alone.
++
++.B qmail-newst
++ensures that
++.B control/spamt.cdb
++is updated atomically,
++so
++.B qmail-smtpd
++never has to wait for
++.B qmail-newst
++to finish.
++However,
++.B qmail-newst
++makes no attempt to protect against two simultaneous updates of
++.BR control/spamt.cdb .
++
++The binary
++.B control/spamt.cdb
++format is portable across machines.
++.SH "SEE ALSO"
++qmail-spamt(5),
++qmail-spamthrottle(5),
++qmail-smtpd(8)
++
++.SH AUTHOR
++Dale Woolridge, James Law, and Moto Kawasaki.  Contact the authors
++via email: <spamthrottle@qmail.ca>.
+diff -Nuar qmail-1.03-3.1/qmail-newst.c qmail-1.03-3.2/qmail-newst.c
+--- qmail-1.03-3.1/qmail-newst.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/qmail-newst.c	2019-09-01 12:43:45.737347584 -0600
+@@ -0,0 +1,185 @@
++#include "stralloc.h"
++#include "subfd.h"
++#include "getln.h"
++#include "substdio.h"
++#include "cdbmss.h"
++#include "exit.h"
++#include "readwrite.h"
++#include "open.h"
++#include "error.h"
++#include "case.h"
++#include "ip.h"
++#include "fmt.h"
++#include "auto_qmail.h"
++
++
++/*
++ * this is pretty much a complete ripoff of qmail-newu.c
++ */
++
++/*
++ * spamt format is:
++ * <network>:dir:st:stmax:flush:rcpt:tg:tg_resp:
++ * fields left empty are "inherited" from less restrictive matches
++ * and an empty entry is the least restrictive network (default settings)
++ */
++
++void die_temp() { _exit(111); }
++
++void die_chdir()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to chdir\n");
++  die_temp();
++}
++void die_nomem()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: out of memory\n");
++  die_temp();
++}
++void die_opena()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to open control/spamt\n");
++  die_temp();
++}
++void die_reada()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to read control/spamt\n");
++  die_temp();
++}
++void die_format()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: bad format in control/spamt\n");
++  die_temp();
++}
++void die_opent()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to open control/spamt.tmp\n");
++  die_temp();
++}
++void die_writet()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to write control/spamt.tmp\n");
++  die_temp();
++}
++void die_rename()
++{
++  substdio_putsflush(subfderr,"qmail-newst: fatal: unable to move control/spamt.tmp to control/spamt.cdb\n");
++  die_temp();
++}
++
++struct cdbmss cdbmss;
++stralloc key = {0};
++stralloc data = {0};
++
++char inbuf[1024];
++substdio ssin;
++
++int fd;
++int fdtemp;
++
++stralloc line = {0};
++int match;
++
++void makedata(sa)
++stralloc *sa;
++{
++  int i;
++  int numcolons = 0;
++
++  for (i = 0;i < sa->len;++i)
++    if (sa->s[i] == ':') {
++      sa->s[i] = 0;
++      if (++numcolons == 7)
++	break;
++    }
++
++  sa->len = i;
++
++  if (numcolons < 7) die_format();
++}
++ 
++
++void main()
++{
++  int i;
++  int j;
++  unsigned int numbits;
++  unsigned long u;
++  unsigned long ipbits;
++  struct ip_address ip;
++  unsigned long uip;
++  char str2ip[FMT_2IP];
++  stralloc defdata = {0};
++
++  umask(033);
++  if (chdir(auto_qmail) == -1) die_chdir();
++
++  if (!stralloc_copyb(&defdata,"\0\0\0\0\0\0\0",7)) die_nomem();
++
++  fd = open_read("control/spamt");
++  if (fd == -1) die_opena();
++
++  substdio_fdbuf(&ssin,read,fd,inbuf,sizeof(inbuf));
++
++  fdtemp = open_trunc("control/spamt.tmp");
++  if (fdtemp == -1) die_opent();
++
++  if (cdbmss_start(&cdbmss,fdtemp) == -1) die_writet();
++
++  ipbits = 0;
++  for (;;) {
++    if (getln(&ssin,&line,&match,'\n') != 0) die_reada();
++    if (line.len && (line.s[0] == '.')) break;
++    if (!match) die_format();
++    if (line.len && (line.s[0] == '#')) continue;
++
++    if (byte_chr(line.s,line.len,'\0') < line.len) die_format();
++    i = byte_chr(line.s,line.len,':');
++    if (i == line.len) die_format();
++    if (i == 0) {
++      if (!stralloc_copyb(&defdata,line.s + 1,line.len - 1)) die_nomem() ;
++      makedata(&defdata);
++    }
++    else {
++      numbits = 32;
++
++      j = ip_scan(line.s,&ip);
++      if (!j) die_format();
++
++      if (j < i) {
++	if (line.s[j] != '/') die_format();
++	scan_ulong(line.s + j + 1,&u);
++	numbits = u;
++	if (numbits == 0) die_format();
++	numbits = numbits % 32;
++	if (numbits == 0) numbits = 32;
++      }
++
++      str2ip[fmt_2ip0(str2ip,&ip)] = 0;
++
++      if (!stralloc_copyb(&key,str2ip,numbits)) die_nomem();
++      if (!stralloc_0(&key)) die_nomem();
++
++      uip = 1 << (numbits - 1);
++      ipbits |= uip;
++
++      if (!stralloc_copyb(&data,&uip,4)) die_nomem();
++      if (!stralloc_catb(&data,line.s + i + 1,line.len - i - 1)) die_nomem();
++      makedata(&data);
++
++      if (cdbmss_add(&cdbmss,key.s,key.len,data.s,data.len) == -1) die_writet();
++    }
++  }
++
++  if (!stralloc_copyb(&data,&ipbits,4)) die_nomem();
++  if (!stralloc_cat(&data,&defdata)) die_nomem();
++
++  if (cdbmss_add(&cdbmss,"",0,data.s,data.len) == -1) die_writet();
++
++  if (cdbmss_finish(&cdbmss) == -1) die_writet();
++  if (fsync(fdtemp) == -1) die_writet();
++  if (close(fdtemp) == -1) die_writet(); /* NFS stupidity */
++  if (rename("control/spamt.tmp","control/spamt.cdb") == -1) die_rename();
++
++  _exit(0);
++}
+diff -Nuar qmail-1.03-3.1/qmail-showctl.c qmail-1.03-3.2/qmail-showctl.c
+--- qmail-1.03-3.1/qmail-showctl.c	2019-09-01 12:25:29.652536506 -0600
++++ qmail-1.03-3.2/qmail-showctl.c	2019-09-01 12:43:45.737347584 -0600
+@@ -9,6 +9,8 @@
+ #include "constmap.h"
+ #include "stralloc.h"
+ #include "direntry.h"
++#include "spam.h"
++#include "uint32.h"
+ #include "auto_uids.h"
+ #include "auto_qmail.h"
+ #include "auto_break.h"
+@@ -137,6 +139,130 @@
+   }
+ }
+ 
++void do_spam()
++{
++  struct stat st;
++  struct stat stcdb;
++  uint32 dlen;
++  stralloc data = {0};
++  int i;
++  int r;
++  int fd;
++  struct spam_t spamt = spam_t_init(0,0);
++  unsigned int uip;
++
++  substdio_puts(subfdout,"\nspamt/spamt.cdb: ");
++  if (stat("spamt",&st) == -1)
++    if (stat("spamt.cdb",&stcdb) == -1)
++      substdio_puts(subfdout,"(Default.) No effect.\n");
++    else
++      substdio_puts(subfdout,"Oops! spamt.cdb exists but spamt doesn't (Spam throttling active).\n");
++  else
++    if (stat("spamt.cdb",&stcdb) == -1)
++      substdio_puts(subfdout,"Oops! spamt exists but spamt.cdb doesn't (No effect).\n");
++    else
++      if (st.st_mtime > stcdb.st_mtime)
++        substdio_puts(subfdout,"Oops! spamt.cdb is older than spamt.\n");
++      else
++        substdio_puts(subfdout,"Modified recently enough; hopefully up to date.\n");
++
++  fd = open_read("spamt.cdb");
++  if (fd == -1) return;
++
++  substdio_puts(subfdout,"\nspamt.cdb (defaults): ");
++
++  r = cdb_seek(fd,"",0,&dlen);
++  if (r != 1)
++  {
++    substdio_puts(subfdout,"No default entry (Spam throttling inactive).\n");
++    return;
++  }
++
++  if (!stralloc_ready(&data,(unsigned int) dlen))
++  {
++    substdio_puts(subfdout,"Unknown (temporary error).\n");
++    return;
++  }
++  data.len = dlen;
++  if (cdb_bread(fd,data.s,data.len) == -1)
++  {
++    substdio_puts(subfdout,"Unknown (unknown error...try running qmail-newst).\n");
++    return;
++  }
++
++  /* get the ipbits block from this key */
++  byte_copy(&uip,4,data.s);
++  /* then populate the spam_t (defaults) */
++  if (spam_get(&spamt,data.s + 4,data.len - 4) == -1)
++  {
++    substdio_puts(subfdout,"Unknown (unknown error...try running qmail-newst).\n");
++    return;
++  }
++
++  substdio_puts(subfdout,"\n\tthrottle constant: ");
++  if (spamt.throttle) {
++    substdio_put(subfdout,num,fmt_uint(num,spamt.throttle));
++    substdio_puts(subfdout,"ms");
++  } else
++    substdio_puts(subfdout,"none (spam throttling not active)");
++
++  substdio_puts(subfdout,"\n\tthrottle max: ");
++  if (spamt.max) {
++    substdio_put(subfdout,num,fmt_uint(num,spamt.max));
++    substdio_puts(subfdout,"ms");
++  } else
++    substdio_puts(subfdout,"no maximum");
++
++  substdio_puts(subfdout,"\n\treasonable recipient count: ");
++  if (spamt.reasonablercpt)
++    substdio_put(subfdout,num,fmt_uint(num,spamt.reasonablercpt));
++  else
++    substdio_puts(subfdout,"unlimited");
++
++  substdio_puts(subfdout,"\n\tpre-DATA flush? ");
++  substdio_puts(subfdout,spamt.flush ? "yes" : "no");
++
++  substdio_puts(subfdout,"\n\tteergrubing periodicity: ");
++  if (spamt.tg) {
++    substdio_put(subfdout,num,fmt_uint(num,spamt.tg));
++    substdio_puts(subfdout,"s");
++  } else
++    substdio_puts(subfdout, "not active");
++
++  if (spamt.tg) {
++    substdio_puts(subfdout,"\n\tteergrube response: ");
++    if (spamt.tg_resp.s)
++      substdio_puts(subfdout,spamt.tg_resp.s);
++    else
++      substdio_puts(subfdout,"(Default.) please wait.");
++  }
++
++  substdio_puts(subfdout,"\n\tspam throttle (state) directory: ");
++  if (spamt.dir.s && spamt.dir.s[0] )
++    if (spamt.dir.s[0] == '/') {
++      substdio_puts(subfdout,"construct ");
++      substdio_puts(subfdout,spamt.dir.s+1);
++      substdio_puts(subfdout,"-bit directory from remote IP");
++    } else
++      substdio_puts(subfdout,spamt.dir.s);
++  else
++    substdio_puts(subfdout,"construct 32-bit directory from remote IP");
++
++  substdio_puts(subfdout,"\n\tother active network blocks (bits): ");
++  r = 0;
++  for (i = 32;i >= 1;--i)
++  {
++    if (!(uip & (1 << (i - 1)))) continue;
++    if (r++)
++      substdio_puts(subfdout,", ");
++    substdio_put(subfdout,num,fmt_uint(num,i));
++  }
++  if (!r)
++    substdio_puts(subfdout,"none");
++
++  substdio_puts(subfdout,"\n");
++}
++
+ void main()
+ {
+   DIR *dir;
+@@ -298,6 +424,7 @@
+ 
+   do_str("smtpgreeting",1,"smtpgreeting","SMTP greeting: 220 ");
+   do_lst("smtproutes","No artificial SMTP routes.","SMTP route: ","");
++  do_spam();
+   do_str("srs_domain",0,"","SRS domain name is ");
+   do_lst("srs_secrets","No secrets","","");
+   do_int("srs_maxage","21","SRS maxage is ","");
+@@ -349,6 +476,8 @@
+     if (str_equal(d->d_name,"rcpthosts")) continue;
+     if (str_equal(d->d_name,"smtpgreeting")) continue;
+     if (str_equal(d->d_name,"smtproutes")) continue;
++    if (str_equal(d->d_name,"spamt")) continue;
++    if (str_equal(d->d_name,"spamt.cdb")) continue;
+     if (str_equal(d->d_name,"srs_domain")) continue;
+     if (str_equal(d->d_name,"srs_secrets")) continue;
+     if (str_equal(d->d_name,"srs_maxage")) continue;
+diff -Nuar qmail-1.03-3.1/qmail-smtpd.8 qmail-1.03-3.2/qmail-smtpd.8
+--- qmail-1.03-3.1/qmail-smtpd.8	2019-09-01 12:25:29.643536501 -0600
++++ qmail-1.03-3.2/qmail-smtpd.8	2019-09-01 12:43:45.737347584 -0600
+@@ -322,7 +322,65 @@
+ .B qmail-smtpd
+ will wait for each new buffer of data from the remote SMTP client.
+ Default: 1200.
++.TP 5
++.I tlsclients
++A list of email addresses. When relay rules would reject an incoming message,
++.B qmail-smtpd
++can allow it if the client presents a certificate that can be verified against
++the CA list in
++.I clientca.pem
++and the certificate email address is in
++.IR tlsclients .
+ 
++.TP 5
++.I tlsserverciphers
++A set of OpenSSL cipher strings. Multiple ciphers contained in a
++string should be separated by a colon. If the environment variable
++.B TLSCIPHERS
++is set to such a string, it takes precedence.
++
++.TP 5
++.I spfbehavior
++Set to a value between 1 and 6 to enable SPF checks; 0 to disable.
++1 selects 'annotate-only' mode, where
++.B qmail-smtpd
++will annotate incoming email with
++.B Received-SPF
++fields, but will not reject any messages.  2 will produce temporary
++failures on DNS lookup problems so you can make sure you always have
++meaningful Received-SPF headers.  3 selects 'reject' mode,
++where incoming mail will be rejected if the SPF record says 'fail'.  4
++selects a more stricter rejection mode, which is like 'reject' mode,
++except that incoming mail will also be rejected when the SPF record
++says 'softfail'.  5 will also reject when the SPF record says 'neutral',
++and 6 if no SPF records are available at all (or a syntax error was
++encountered). The contents of this file are overridden by the value of
++the
++.B SPFBEHAVIOR
++environment variable, if set.
++Default: 0.
++.TP 5
++.I spfexp
++You can add a line with a an SPF explanation that will be shown to the
++sender in case of a reject. It will override the default one. You can
++use SPF macro expansion.
++.TP 5
++.I spfguess
++You can add a line with SPF rules that will be checked if a sender
++domain doesn't have a SPF record. The local rules will also be used
++in this case.
++.TP 5
++.I spfrules
++You can add a line with SPF rules that will be checked before other SPF
++rules would fail.  This can be used to always allow certain machines to
++send certain mails.
++.TP 5
++.I spamt
++The spam throttle parameters file.  See
++.BR qmail-newst (8)
++and
++.BR qmail-spamt (5)
++for details.
+ 
+ .SH "ENVIRONMENT VARIABLES READ"
+ Environment variables may be defined globally in the
+@@ -384,63 +442,14 @@
+ 
+ Note: The use of 'cram' requires a CRAM-MD5 enabled PAM.
+ 
+-.TP 5
+-.I tlsclients
+-A list of email addresses. When relay rules would reject an incoming message,
+-.B qmail-smtpd
+-can allow it if the client presents a certificate that can be verified against
+-the CA list in
+-.I clientca.pem
+-and the certificate email address is in
+-.IR tlsclients .
+-
+-.TP 5
+-.I tlsserverciphers
+-A set of OpenSSL cipher strings. Multiple ciphers contained in a
+-string should be separated by a colon. If the environment variable
+-.B TLSCIPHERS
+-is set to such a string, it takes precedence.
+-
+-.TP 5
+-.I spfbehavior
+-Set to a value between 1 and 6 to enable SPF checks; 0 to disable.
+-1 selects 'annotate-only' mode, where
+-.B qmail-smtpd
+-will annotate incoming email with
+-.B Received-SPF
+-fields, but will not reject any messages.  2 will produce temporary
+-failures on DNS lookup problems so you can make sure you always have
+-meaningful Received-SPF headers.  3 selects 'reject' mode,
+-where incoming mail will be rejected if the SPF record says 'fail'.  4
+-selects a more stricter rejection mode, which is like 'reject' mode,
+-except that incoming mail will also be rejected when the SPF record
+-says 'softfail'.  5 will also reject when the SPF record says 'neutral',
+-and 6 if no SPF records are available at all (or a syntax error was
+-encountered). The contents of this file are overridden by the value of
+-the
+-.B SPFBEHAVIOR
+-environment variable, if set.
+-Default: 0.
+-.TP 5
+-.I spfexp
+-You can add a line with a an SPF explanation that will be shown to the
+-sender in case of a reject. It will override the default one. You can
+-use SPF macro expansion.
+-.TP 5
+-.I spfguess
+-You can add a line with SPF rules that will be checked if a sender
+-domain doesn't have a SPF record. The local rules will also be used
+-in this case.
+-.TP 5
+-.I spfrules
+-You can add a line with SPF rules that will be checked before other SPF
+-rules would fail.  This can be used to always allow certain machines to
+-send certain mails.
+ .SH "SEE ALSO"
+ tcp-env(1),
+ tcp-environ(5),
+ qmail-control(5),
++qmail-spamt(5),
++qmail-spamthrottle(5),
+ qmail-inject(8),
+ qmail-newmrh(8),
++qmail-newst(8),
+ qmail-queue(8),
+ qmail-remote(8)
+diff -Nuar qmail-1.03-3.1/qmail-smtpd.c qmail-1.03-3.2/qmail-smtpd.c
+--- qmail-1.03-3.1/qmail-smtpd.c	2019-09-01 12:25:29.727536550 -0600
++++ qmail-1.03-3.2/qmail-smtpd.c	2019-09-01 12:43:45.738347585 -0600
+@@ -38,6 +38,7 @@
+ #include "strerr.h"
+ #include "cdb.h"
+ #include "wait.h"
++#include "spam.h"
+ 
+ #define AUTHSLEEP 5
+ 
+@@ -102,6 +103,27 @@
+ void flush() { substdio_flush(&ssout); }
+ void out(s) char *s; { substdio_puts(&ssout,s); }
+ 
++int saferead(fd,buf,len) int fd; char *buf; int len;
++{
++  int r;
++  flush();
++#ifdef TLS
++  if (ssl && fd == ssl_rfd)
++    r = ssl_timeoutread(timeout, ssl_rfd, ssl_wfd, ssl, buf, len);
++  else
++#endif
++  r = timeoutread(timeout,fd,buf,len);
++  if (r == -1) if (errno == error_timeout) die_alarm();
++  if (r <= 0) die_read();
++  return r;
++}
++
++char ssinbuf[1024];
++substdio ssin = SUBSTDIO_FDBUF(saferead,0,ssinbuf,sizeof ssinbuf);
++#ifdef TLS
++void flush_io() { ssin.p = 0; flush(); }
++#endif
++
+ void die_read() { _exit(1); }
+ void die_alarm() { out("451 timeout (#4.4.2)\r\n"); flush(); _exit(1); }
+ void die_nomem() { out("421 out of memory (#4.3.0)\r\n"); flush(); _exit(1); }
+@@ -175,7 +197,9 @@
+ stralloc helohost = {0};
+ char *fakehelo; /* pointer into helohost, or 0 */
+ 
+-void dohelo(arg) char *arg; {
++void dohelo(arg)
++char *arg;
++{
+   if (!stralloc_copys(&helohost,arg)) die_nomem(); 
+   if (!stralloc_0(&helohost)) die_nomem(); 
+   fakehelo = case_diffs(remotehost,helohost.s) ? helohost.s : 0;
+@@ -202,6 +226,7 @@
+ 
+ int logregex = 0;
+ stralloc matchedregex = {0};
++struct spam_t spamt = spam_t_init(&ssin,&ssout);
+ 
+ void setup()
+ {
+@@ -265,6 +290,7 @@
+   if (!remotehost) remotehost = "unknown";
+   remoteinfo = env_get("TCPREMOTEINFO");
+   relayclient = env_get("RELAYCLIENT");
++  spam_control(&spamt);
+   auth = env_get("SMTPAUTH");
+   if (auth) {
+     smtpauth = 1;
+@@ -460,6 +486,7 @@
+ stralloc rcptto = {0};
+ stralloc fuser = {0};
+ stralloc mfparms = {0};
++int rcptcount;
+ 
+ int mailfrom_size(arg) char *arg;
+ {
+@@ -537,7 +563,10 @@
+   if (!ssl && (stat("control/servercert.pem",&st) == 0)) 
+     out("\r\n250-STARTTLS");
+ #endif
+-  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
++  if (!spamt.flush || !spamt.throttle) {
++   out("\r\n250-PIPELINING");
++  }
++  out("\r\n250-8BITMIME\r\n");
+ #ifdef TLS
+   if (!forcetls || ssl ) {
+ #endif
+@@ -615,6 +645,7 @@
+   if (!stralloc_copys(&rcptto,"")) die_nomem();
+   if (!stralloc_copys(&mailfrom,addr.s)) die_nomem();
+   if (!stralloc_0(&mailfrom)) die_nomem();
++  rcptcount = 0;
+   out("250 ok\r\n");
+ }
+ 
+@@ -718,6 +749,7 @@
+     if (!stralloc_cats(&rcptto,"T")) die_nomem();
+     if (!stralloc_cats(&rcptto,addr.s)) die_nomem();
+     if (!stralloc_0(&rcptto)) die_nomem();
++    ++rcptcount;
+     out("250 ok\r\n");
+   }
+   
+@@ -746,27 +778,6 @@
+ */
+ }
+ 
+-int saferead(fd,buf,len) int fd; char *buf; int len;
+-{
+-  int r;
+-  flush();
+-#ifdef TLS
+-  if (ssl && fd == ssl_rfd)
+-    r = ssl_timeoutread(timeout, ssl_rfd, ssl_wfd, ssl, buf, len);
+-  else
+-#endif
+-  r = timeoutread(timeout,fd,buf,len);
+-  if (r == -1) if (errno == error_timeout) die_alarm();
+-  if (r <= 0) die_read();
+-  return r;
+-}
+-
+-char ssinbuf[1024];
+-substdio ssin = SUBSTDIO_FDBUF(saferead,0,ssinbuf,sizeof ssinbuf);
+-#ifdef TLS
+-void flush_io() { ssin.p = 0; flush(); }
+-#endif
+-
+ struct qmail qqt;
+ unsigned int bytestooverflow = 0;
+ 
+@@ -968,6 +979,10 @@
+   if (base64types.len == 1 ) if (!env_unset("QHPSI")) die_nomem();
+   if (qmail_open(&qqt) == -1) { err_qqt(); return; }
+   qp = qmail_qp(&qqt);
++
++  spamt.rcptcount = rcptcount;
++  spam_wait(&spamt);
++
+   out("354 go ahead\r\n");
+  
+   received(&qqt,protocol,local,remoteip,remotehost,remoteinfo,fakehelo);
+@@ -977,7 +992,7 @@
+   if (hops) qmail_fail(&qqt);
+   qmail_from(&qqt,mailfrom.s);
+   qmail_put(&qqt,rcptto.s,rcptto.len);
+- 
++  
+   qqx = qmail_close(&qqt);
+   if (!*qqx) { acceptmessage(qp); return; }
+   if (hops) {
+diff -Nuar qmail-1.03-3.1/qmail-spamt.9 qmail-1.03-3.2/qmail-spamt.9
+--- qmail-1.03-3.1/qmail-spamt.9	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/qmail-spamt.9	2019-09-01 12:43:45.738347585 -0600
+@@ -0,0 +1,142 @@
++.TH qmail-spamt 5
++.SH NAME
++qmail-spamt \- assign spam throttle parameters to IP blocks
++.SH OVERVIEW
++The file
++.B QMAILHOME/control/spamt
++assigns spam throttle parameters to IP blocks. For example,
++
++.EX
++   192.168.0.0/24:private:2000:120000::::::
++.EE
++
++says that mail originating from IP block
++.B 192.168.0.0/24
++will use
++.B QMAILHOME/spam/private
++as the spam throttle directory, with a spam throttle
++delay of 2000 and a spam throttle maximum delay of 120000 
++(both in milliseconds).  All other spam throttle parameters
++are unaffected.  To define the default spam throttle parameters,
++define an entry in
++.B QMAILHOME/control/spamt
++with an empty IP block.
++
++Assignments fed to
++.B qmail-newst
++will be used by
++.B qmail-smtpd
++to control spam throttling.
++See
++.BR qmail-newst (8).
++A change to
++.B QMAILHOME/control/spamt
++will have no effect until
++.B qmail-newst
++is run.
++.SH STRUCTURE
++.B QMAILHOME/control/spamt
++is a series of assignments, one per line.
++It ends with a line containing a single dot.
++Lines must not contain NUL.
++.SH "ASSIGNMENTS"
++A simple assignment is a line of the form
++
++.EX
++   ipblock:dir:st:stmax:flush:rcpt:tg:tg_resp:
++.EE
++
++Here
++.I ipblock
++is an IP block (format
++.I \fR[\fIa\fR.\fIb\fR.\fIc\fR.\fId\fR][/\fIn\fR]]);
++.IR dir ,
++.IR st ,
++.IR stmax ,
++.IR flush ,
++.IR rcpt ,
++.IR tg ,
++and
++.I tg_resp
++are the spam throttle parameters for directory (relative path),
++delay (ms), maximum delay (ms), post-DATA flush, reasonable receipt count,
++teergrube periodicity (s), and teergrube response.  Real-time values
++for
++.I ipblock
++will be stored in
++.BR QMAILHOME/spam/\fIdir .
++See
++.BR qmail-spamthrottle (9).
++ 
++If there are several assignments for the same
++.IR ipblock ,
++.B qmail-smtpd
++will use the first one.
++
++If an entry exists with an empty
++.IR ipblock,
++it is always used to define default (initial) values.
++
++If several, distinct
++.IR ipblock s
++match a given IP address, as specified by environment variable
++.BR TCPREMOTEIP ,
++the most specific (smallest network block) entry is used.
++
++If, after applying all applicable rules,
++.I dir 
++is empty, then it will be set to
++.IR a\fR/\fIb\fR/\fIc\fR/\fId ,
++where
++.IR a ,
++.IR b ,
++.IR c ,
++and
++.I d
++are the first four octets (in decimal) for the remote IP address,
++.IR a\fR.\fIb\fR.\fIc\fR.\fId .
++
++If
++.I dir
++starts with a slash (\fB/\fR), then it will be used to generate an \fIn\fR-bit masked
++IP address (format 
++.I \fR[/\fIn\fR])
++based on the remote IP address.  For example, if
++.I dir
++is set to
++.B /16
++and the remote IP address is
++.BR 192.168.10.3 ,
++then the spam throttle directory will be
++.BR 192/168/0/0 .
++
++
++.SH EXAMPLES
++
++.EX
++   192.168.0.0/24::0::::::
++   192.168.0.2:specific:2000::::::
++   192.168.1.0/16:testing:10000:::1:2:hold your horses!:
++   # empty network ==> default entry
++   ::1501:120000::::::
++.EE
++
++The IP address
++.B 192.168.2.1
++is handled by the fourth line;
++the IP address
++.B 192.168.1.2
++is handled by the third line;
++the IP address
++.B 192.168.0.2
++is handled by the second line;
++the address
++.B 192.168.0.1
++is handled by the first line.
++.SH "SEE ALSO"
++qmail-newst(8),
++qmail-spamthrottle(5)
++
++.SH AUTHOR
++Dale Woolridge, James Law, and Moto Kawasaki.  Contact the authors
++via email: <spamthrottle@qmail.ca>.
+diff -Nuar qmail-1.03-3.1/qmail-spamthrottle.9 qmail-1.03-3.2/qmail-spamthrottle.9
+--- qmail-1.03-3.1/qmail-spamthrottle.9	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/qmail-spamthrottle.9	2019-09-01 12:43:45.738347585 -0600
+@@ -0,0 +1,309 @@
++.TH qmail-spamthrottle 5
++
++.SH NAME
++qmail-spamthrottle \- the qmail spam throttle mechanism
++
++.SH INTRODUCTION
++The idea of spam throttling came about after would-be spammers were
++easily circumventing (classic) tarpitting.  A reasonable recipient
++limit in tarpitting must not adversely affect acceptable mail usage,
++so spam clients typically create multiple SMTP connections, all of
++which fall under this threshold.  Other sources have similar concepts,
++using rate limiting, stuttering, et cetera to describe them.
++
++It was originally intended for use at ISPs to control their internal
++clients (users) SMTP usage, although it can applied equally in other
++environments.  An ISP may wish to enable this mechanism for its customers
++to prevent them from using the mail servers as a convenient location
++from which to send spam.  However, in some or all other cases (other
++originating IP addresses) this mechanism might be disabled to allow
++for legitimate high-volume mail traffic such as mailing lists.
++
++Spam throttling acts in a similar manner to tarpitting, except that
++it is highly parameterized, more flexible, and (hopefully) more effective.
++A wait is imposed (via
++.BR sleep (3))
++following the
++.B DATA
++command depending on these SMTP parameters: remote IP address;
++previous SMTP connection timestamp; and previous wait time.
++
++With the addition of teergrubing, spammers should keep their
++connections open and deliver less mail.
++
++
++.SH DETAILS
++Two files,
++.I wait
++and
++.IR time ,
++store the previous wait time and SMTP connection timestamp,
++respectively.  Both files are found in
++.BR QMAILHOME/spam/\fIdir\fB .
++Where
++.I dir
++is based on parameters set in
++.BR QMAILHOME/control/spamt .
++If
++.I dir
++is empty as a result, then it will be automatically set to
++.IR a\fR/\fIb /0/0,
++where
++.I a
++and
++.I b
++are the two octets (in decimal) for the remote IP address,
++.IR a\fR.\fIb\fR.\fIc\fR.\fId .
++
++Similarly, if
++.I dir
++starts with a slash (\fB/\fR), then it be automatically set to
++the \fIn\fR-bit masked IP address (format
++.IR \fR[/\fIn ]),
++based on the remote IP address.
++
++See 
++.B qmail-spamt(5)
++for details.
++
++.B Note:
++In case it is not yet evident, when
++.I dir
++is empty (or starts with a slash), as indicated above, then every
++dot (\fB.\fR) is interpreted as a slash (\fB/\fR) in the construction
++of the directory where the spam throttle state files are stored.
++
++
++If you are using libtai for your time calculations,
++then the format for the
++.I time
++file is a packed TAI64NA label.  If you have perl and the tai64nlocal
++program, you can use the following perl expression to convert from
++a packed TAI64NA label to a TAI64N timestamp:
++
++.EX
++	print join("","@",unpack("H24",<>)), "\n";
++.EE
++
++
++Given an entry in
++.BR QMAILHOME/control/spamt ,
++such as
++
++.EX
++   ipblock:dir:st:stmax:flush:rcpt:tg:tg_resp:
++.EE
++
++Message throughput is controlled via the value of
++.IR st .
++The delays imposed (by calling 
++.BR sleep (3))
++depend on:  the value of \fIst\fR); number of recipients
++for the current SMTP session (\fIR\fR); the number of reasonable
++recipients per connection (\fIrcpt\fR); how much time has
++passed (\fIT\fR) since the last SMTP request (as determined by
++.BR QMAILHOME/spam/\fIdir\fB/time );
++and the last imposed delay (\fIW\fR) (as determined by
++.BR QMAILHOME/spam/\fIdir\fB/wait ).
++The new delay is approximately
++.EX
++
++    (\fIR\fR - \fIR\fR / 2^(\fIR\fR/\fIrcpt\fR)) * ((\fIW\fR * \fIst\fR * \fIR\fR) / \fIT\fR)
++
++.EE
++when \fIrcpt\fR is greater than 0, and
++.EX
++
++     (\fIW\fR * \fIst\fR * \fIR\fR) / \fIT\fR
++
++.EE
++otherwise.  The unit of time is milliseconds.
++
++If
++.I stmax
++is defined (and is non-zero), then it is used as a maximum
++(in milliseconds) for the delay calculated above.
++
++In short,
++.I st
++is roughly the minimum time between messages and/or connections.  If you already know
++that you only want a throughput of N messages per second, then you can use 1000/N
++as a good starting point for
++.IR st .
++
++.SH CONFIGURATION
++
++For the following discussion, we assuming the matching
++entry in
++.B QMAILHOME/control/spamt
++is
++
++.EX
++   ipblock:dir:st:stmax:flush:rcpt:tg:tg_resp:
++.EE
++
++Despite efforts to impose a waiting period on would-be
++spammers, it is still possible for the client to circumvent
++the call to
++.BR sleep (3).
++That is, they may not wait for the response from
++the DATA command, continuing to write their message, assuming
++success, then closing the socket, again without waiting for a
++response from the server; the message will be delivered at no
++(time) cost to them.  Adherence to standards (such as ignoring
++the absence of PIPELINING) should not be assumed for clients
++acting as agents for unsolicited bulk email.  As such, the
++.I flush
++variable can be set (non-zero) to indicate that all input will
++be flushed after calling
++.BR sleep (3)
++and prior to sending a response to the DATA command.
++RFC 2920 (STD 60) prohibits flushing of the input buffer if
++PIPELINING is supported.  As such, EHLO responses will not
++advertise PIPELINING while 
++.I flush
++is set.
++
++Another method, teergrubing, involves issuing continuation lines
++periodically to keep the client connected while they wait for the
++go ahead from the DATA command.  By setting (non-zero) the variable
++.IR tg ,
++you can specify the frequency of continuation lines in response to the
++DATA command.  If the argument to
++.BR sleep (3)
++would have been 11 (seconds) and
++.I tg
++is set to 2, then the response to the DATA command would result in
++several calls to sleep(2) (and one sleep(1)) with each accompanied
++by a continuation line.  A continuation line consist of a 3-digit code,
++a dash, and an arbitrary string.  The default string is "please wait",
++but can be changed using the
++.I tg_resp
++variable. For example,
++
++.EX
++     ...
++     DATA
++     354-please wait
++     354-please wait
++     354 go ahead
++     ...
++.EE
++
++
++.SH ENVIRONMENT
++The environment variable,
++.BR TCPREMOTEIP ,
++is strictly required by spam throttle.  If you are not using
++.BR tcpserver ,
++then you will have to use
++.B tcp-env
++to ensure
++.B TCPREMOTEIP 
++is set.
++
++
++.SH CAVEATS
++The implicit translation of an empty directory to one based on the
++remote IP address will most certainly result in an unwieldy spam
++directory structure and should be reserved for small networks, such
++as the internal network side of an office or ISP (including ISP users).
++It is recommended that the
++.I \fR/\fIn
++format be used in the default
++.B QMAILHOME/control/spamt
++entry (empty network block).  Then, for specific networks, a directory
++per IP address is still possible: for example, the entries
++
++.EX
++   192.168.0.0/24:/32:::::::
++   :/16:1500:120000::::::
++.EE
++
++define the default spam throttle directory (assuming the remote IP address is
++.IR a\fR.\fIb\fR.\fIc\fR.\fId )
++as
++.IR a\fR/\fIb /0/0.
++However, when the remote IP address is in the 192.168.0.0/24 network block,
++the spam throttle directory will be
++.IR a\fR/\fIb\fR/\fIc\fR/\fId ,
++since the
++.I dir
++parameter is
++.BR /32 .
++
++.SH EXAMPLES
++These examples assume that
++.B QMAILHOME/control/spamthrottle 
++contains a non-zero value.
++
++Here is a sample
++.B QMAILHOME/control/spamt
++file for a home user:
++.EX
++
++    # network:dir:st:stmax:flush:rcpt:tg:tg_resp:
++    # 
++    # default entry (make it all share the public directory)
++    :public:1500:120000::::::
++    #
++    # private (trusted) network does not enforce spamthrottle
++    192.168.0.0/24::0::::::
++    #
++    # some external network which we would like to throttle collectively
++    10.0.0.0/24:collected:::::::
++    #
++    # an external network (semi-trusted) which is throttled
++    # based on individual IP address
++    # - we don't specify SPAMTHROTTLEDIR and the default
++    #   behaviour of storing state files in directories
++    #   based on IP address is used)
++    # - we also allow relaying from this semi-trusted
++    #   network
++    10.1.0.0/16:/32:::::::
++    .
++
++.EE
++
++Here is a sample file for a high-volume mail server (or servers)
++for some arbitrary ISP (with customer network 10.0.0.0/16 and internal/
++employee network 10.1.0.0/24):
++.EX
++
++    # network:dir:st:stmax:flush:rcpt:tg:tg_resp:
++    #
++    # by default, turn throttling off
++    ::0:::::::
++    #
++    # customer network uses default behaviour
++    # (IP-based throttle files)
++    10.0.0.0/16:/32:::::::
++    #
++    # employee network doesn't adhere to throttling
++    10.1.0.0/24::0::::::
++    #
++    # external trusted network which legitimately
++    # provides high volume mail traffic
++    10.1.1.0/24::0::::::
++    #
++    # a collection of addresses/networks which we
++    # might have gathered from past abuse experience
++    # - we allow the mail, but we're aggressive
++    #   about throttling it
++    10.1.2.1/32:abuse:5000::::::
++    10.1.2.2/32:abuse:5000::::::
++    10.1.2.3/32:abuse:5000::::::
++    10.1.3.0/24:abuse:5000::::::
++    .
++
++.EE
++
++.SH "SEE ALSO"
++tcp-env(1),
++tcp-environ(5),
++qmail-spamt(5),
++qmail-smtpd(8)
++
++.SH AUTHOR
++Dale Woolridge, James Law, and Moto Kawasaki.  Contact the authors
++via email: <spamthrottle@qmail.ca>.
+diff -Nuar qmail-1.03-3.1/README.spamthrottle qmail-1.03-3.2/README.spamthrottle
+--- qmail-1.03-3.1/README.spamthrottle	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/README.spamthrottle	2019-09-01 12:43:45.734347581 -0600
+@@ -0,0 +1,21 @@
++qmail-spamthrottle 2.01
++20021225
++Copyright 2001,2002
++D. Woolridge
++J. Law
++M. Kawasaki
++
++Contact the authors via email: <spamthrottle@qmail.ca>
++
++Man pages have been updated with spamthrottle documentation:
++  qmail-smtpd(8)		(file qmail-smtpd.8)
++  qmail-control(5)		(file qmail-control.9)
++  qmail-spamt(5)		(file qmail-spamt.9) ** new **
++  qmail-spamthrottle(5)		(file qmail-spamthrottle.9) ** new **
++  qmail-newst(8)		(file qmail-newst.9) ** new **
++
++This patch uses subsecond precision calculations.  Use of libtai
++(http://cr.yp.to/libtai.html) is recommended, but not required.
++If you choose to use libtai, we suggest version 0.60 since this patch
++has been tested with it.  Use of libtai is automatic when it is
++available (for inclusion and linking).
+diff -Nuar qmail-1.03-3.1/scan_2long.c qmail-1.03-3.2/scan_2long.c
+--- qmail-1.03-3.1/scan_2long.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/scan_2long.c	2019-09-01 12:43:45.739347587 -0600
+@@ -0,0 +1,11 @@
++#include "scan.h"
++
++unsigned int scan_2long(s,u) register char *s; register unsigned long *u;
++{
++  register unsigned int pos; register unsigned long result;
++  register unsigned long c;
++  pos = 0; result = 0;
++  while ((c = (unsigned long) (unsigned char) (s[pos] - '0')) < 2)
++    { result = (result << 1) + c; ++pos; }
++  *u = result; return pos;
++}
+diff -Nuar qmail-1.03-3.1/scan.h qmail-1.03-3.2/scan.h
+--- qmail-1.03-3.1/scan.h	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/scan.h	2019-09-01 12:43:45.738347585 -0600
+@@ -10,6 +10,7 @@
+ extern unsigned int scan_ulong();
+ extern unsigned int scan_xlong();
+ extern unsigned int scan_nbblong();
++extern unsigned int scan_2long();
+ 
+ extern unsigned int scan_plusminus();
+ extern unsigned int scan_0x();
+diff -Nuar qmail-1.03-3.1/spam.c qmail-1.03-3.2/spam.c
+--- qmail-1.03-3.1/spam.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/spam.c	2019-09-01 12:43:45.739347587 -0600
+@@ -0,0 +1,395 @@
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <errno.h>
++#include "auto_uids.h"
++#include "lock.h"
++#include "stralloc.h"
++#include "control.h"
++#include "open.h"
++#include "fmt.h"
++#include "timeoutread.h"
++#include "error.h"
++#include "time.h"
++#include "ip.h"
++#include "env.h"
++#include "cdb.h"
++#include "spam.h"
++
++
++
++
++int spam_create_directory(dn)
++char *dn;
++{
++  struct stat sd;
++
++  if (stat(dn,&sd) == 0) return 1;				/* already there */
++  if (errno != error_noent) return 0;				/* can't stat, and not there */
++  if (mkdir(dn,0700) == -1 && errno != error_exist) return 0;	/* can't create dir */
++  if (chown(dn,auto_uidd,auto_gidn) == -1) return 0;		/* can't chown dir */
++
++  return 1;
++}
++
++
++int spam_open_rw(fn)
++char *fn;
++{
++  int fd;
++
++  fd = open_rw(fn);
++
++  if (fd == -1) return -1;				/* can't open file for read/write */
++  if (chmod(fn,0600) == -1) { close(fd); return -1; }	/* can't chmod file */
++
++  return fd;
++}
++
++
++int spam_stralloc_path(to,path,pa1,pa2)
++stralloc *to;
++char *path;
++char *pa1;
++char *pa2;
++{
++  if (!stralloc_copys(to,path)) return -1;
++  if (!stralloc_cats(to,pa1)) return -1;
++  if (pa2 && !stralloc_cats(to,pa2)) return -1;
++  if (!stralloc_0(to)) return -1;
++
++  return 0;
++}
++
++
++static unsigned int normalize_recipients(r,r_m)
++unsigned int r;
++unsigned int r_m;
++{
++  static const unsigned int r_min = 1;
++  unsigned int r_new = r_min;
++
++  if( r_m )
++  {
++    r_new = r - (r >> (r/r_m));
++    if( r_new < r_min ) r_new = r_min;
++  }
++
++  return r_new;
++}
++
++
++static unsigned int normalize_wait(w,dt,s_t,s_m,r,r_m)
++unsigned int w;
++unsigned int dt;
++unsigned int s_t;
++unsigned int s_m;
++unsigned int r;
++unsigned int r_m;
++{
++  static const unsigned int min_wait = 100;
++  unsigned int w_new = 0;
++
++  /*
++   * the maximum throttle times the "reasonable" # recipients
++   * is approximately the longest wait we want/expect so if
++   * we've waited that long, then we'll return the minimum
++   */
++  if( r_m && s_m && dt > (s_m * r_m) ) return min_wait;
++
++  /*
++   * then apply a normalizing factor to the previous wait (w) of
++   * (s_t * r) / dt, where s_t is our throttle constant (time per msg),
++   * r is actual # recipients, and dt is time since last imposed wait
++   */
++  w_new = (w * (s_t * r)) / (dt ? dt : 1);
++  if( w_new < min_wait ) w_new = min_wait;
++
++  return w_new;
++}
++
++
++static void spam_sleep(spamt,wait)
++struct spam_t * spamt;
++unsigned int wait;
++{
++  struct sockaddr sa;
++  int salen;
++  unsigned int tg = 0;
++  /*
++   * output continuation lines (up to) every "tg" seconds (when tg active)
++   */
++  while (wait)
++  {
++    if (spamt->tg && spamt->out)
++    {
++      tg = (wait < spamt->tg) ? wait : spamt->tg;
++      wait -= tg;
++      substdio_puts(spamt->out,spamt->code);
++      substdio_put(spamt->out,spamt->tg_resp.s,spamt->tg_resp.len);
++      substdio_puts(spamt->out,"\r\n");
++      substdio_flush(spamt->out);
++    }
++    else
++    {
++      tg = wait;
++      wait = 0;
++    }
++    if (spamt->in)
++    {
++      while (tg--)
++      {
++	salen = sizeof(sa);
++	if (getpeername(spamt->in->fd,&sa,&salen) == -1 && errno == ENOTCONN) return;
++	sleep(1);
++      }
++    }
++    else
++    {
++      sleep(tg);
++    }
++  }
++}
++
++
++static void spam_flush(spamt)
++struct spam_t * spamt;
++{
++  char ch;
++  /*
++   * see if we should flush all input (we want to force them to
++   * wait for the response from their DATA command before we
++   * accept input from them)
++   */
++  if (!spamt) return;
++  if (!spamt->throttle) return;
++  if (!spamt->flush) return;
++  if (!spamt->in) return;
++
++  while (timeoutread(1,spamt->in->fd,&ch,1) > 0) ;
++  /* timeout/error...doesn't matter */
++}
++
++
++int spam_wait(spamt)
++struct spam_t * spamt;
++{
++  stralloc sd = {0};
++  stralloc sw = {0};
++  stralloc st = {0};
++  stralloc sl = {0};
++  unsigned int pd = 0;
++  int fdw = 0;
++  int fdt = 0;
++  int fdl = 0;
++  struct q_time_t tn;
++  struct q_time_t ts;
++  unsigned int lw = 0;
++  unsigned long it = 0;
++  unsigned long sr = 0;
++  int rc = 1;
++  int fc;
++
++  if (!spamt) return 0;
++  if (!spamt->throttle) return 0;
++
++  if (spam_stralloc_path(&sd,"spam/",spamt->dir.s,0) == -1) return 0;
++
++  if (spamt->use_ip)
++    fc = '.';
++  else
++    fc = '/';
++
++  while (1)
++  {
++    pd += str_chr(&sd.s[pd],fc);
++    if (!sd.s[pd]) fc = 0;
++
++    sd.s[pd] = '\0';
++    if (!spam_create_directory(sd.s)) return 0;
++    if (!fc) break;
++    sd.s[pd] = '/';
++    pd++;
++  }
++
++  if (spam_stralloc_path(&sl,sd.s,"/lock",0) == -1) return 0;
++  if (spam_stralloc_path(&st,sd.s,"/time",0) == -1) return 0;
++  if (spam_stralloc_path(&sw,sd.s,"/wait",0) == -1) return 0;
++
++  if ((fdl = spam_open_rw(sl.s)) == -1) return 0;
++
++  if (lock_exfcntl(fdl) == -1)
++  {
++    close(fdl);
++    return 0;
++  }
++
++  if ((fdt = spam_open_rw(st.s)) == -1)
++  {
++    lock_unfcntl(fdl);
++    close(fdl);
++    return 0;
++  }
++
++  if ((fdw = spam_open_rw(sw.s)) == -1)
++  {
++    lock_unfcntl(fdl);
++    close(fdl);
++    close(fdt);
++    return 0;
++  }
++
++  close(fdw);
++  close(fdt);
++
++  time_now(&tn);
++  ts = tn;
++  control_readtime(&ts,st.s);
++  control_readint(&lw,sw.s);
++
++  time_sub(&ts,&tn,&ts);
++
++  it = time_ms(&ts);
++  lw =   normalize_recipients( spamt->rcptcount, spamt->reasonablercpt )
++       * normalize_wait( lw, it, spamt->throttle, spamt->max, spamt->rcptcount, spamt->reasonablercpt );
++
++  if (control_writetime(&tn,st.s) < 1)
++  {
++    lock_unfcntl(fdl);
++    close(fdl);
++    return 0;
++  }
++
++  rc = (control_writeint(&lw,sw.s) > 0);
++  rc &= (lock_unfcntl(fdl) != -1);
++
++  close(fdl);
++
++  if (!rc) return 0;
++
++  if (lw < 1000) return 0;
++
++  if (spamt->max && lw > spamt->max) lw = spamt->max;
++  lw /= 1000;
++
++  spam_sleep(spamt,lw);
++
++  spam_flush(spamt);
++
++  return 1;
++}
++
++
++/*
++ * take a spam_t and update fields from cdb file
++ */
++void spam_control(st)
++struct spam_t * st;
++{
++  char * remoteip = 0;
++  struct ip_address ip;
++  char str2ip[FMT_2IP];
++  char ipdir[IPFMT];
++  stralloc ipkey = {0};
++  uint32 dlen;
++  int fd;
++  int r;
++  stralloc data = {0};
++  unsigned long u;
++  unsigned int numbits;
++  int i;
++  unsigned int uip;
++  struct spam_t rst;
++  int flagrawip = 0;
++
++  if (!st) return;
++  rst = *st;
++
++  remoteip = env_get("TCPREMOTEIP");
++  if (!remoteip) return;
++
++  fd = open_read("control/spamt.cdb");
++  if (fd == -1) return;
++
++  r = cdb_seek(fd,"",0,&dlen);
++  if (r != 1) return;		/* require existence of this key (defaults) */
++
++  if (!stralloc_ready(&data,(unsigned int) dlen)) return;
++  data.len = dlen;
++  if (cdb_bread(fd,data.s,data.len) == -1) return;
++
++  /* get the ipbits block from this key */
++  byte_copy(&uip,4,data.s);
++  /* then populate the spam_t (defaults) */
++  if (spam_get(&rst,data.s + 4,data.len - 4) == -1) return;
++
++  if (ip_scan(remoteip,&ip))
++  {
++    str2ip[fmt_2ip0(str2ip,&ip)] = 0;
++
++    /* find the smallest network block that matches */
++    for (i = 32;i >= 1;--i)
++    {
++      if (!(uip & (1 << (i - 1)))) continue;
++
++      stralloc_copyb(&ipkey,str2ip,i);
++      stralloc_0(&ipkey);
++      r = cdb_seek(fd,ipkey.s,ipkey.len,&dlen);
++      if (r == -1) return;
++      if (r == 0) continue;
++
++      if (!stralloc_ready(&data,(unsigned int) dlen)) return;
++      data.len = dlen;
++
++      if (cdb_bread(fd,data.s,data.len) == -1) return;
++
++      /* skip the ipbits block */
++      r = spam_get(&rst,data.s + 4,data.len - 4);
++      if (r == -1) return;
++      break;
++    }
++  }
++  else
++  {
++    flagrawip = 1;
++  }
++
++  close(fd);
++
++  if (!rst.throttle) return;
++
++  if (!rst.dir.s || rst.dir.s[0] == '/')
++  {
++    if (flagrawip)
++    {
++      stralloc_copys(&rst.dir,remoteip);
++      stralloc_0(&rst.dir);
++    }
++    else
++    {
++      /* generate an n-bit masked ip address */
++      numbits = 16;	/* default to a 16-bit block (large, but reasonable) */
++      if (rst.dir.s && rst.dir.s[0] == '/')
++      {
++	/* get bits if specified */
++	scan_ulong(rst.dir.s+1,&u);
++	numbits = u;
++      }
++
++      ipdir[fmt_ipn(ipdir,&ip,numbits)] = 0;
++
++      stralloc_copys(&rst.dir,ipdir);
++      stralloc_0(&rst.dir);
++    }
++
++    rst.use_ip = 1;
++  }
++
++  if (!rst.tg_resp.s)
++  {
++    if (!stralloc_copys(&rst.tg_resp,"please wait")) return;
++    if (!stralloc_0(&rst.tg_resp)) return;
++  }
++
++  *st = rst;
++}
+diff -Nuar qmail-1.03-3.1/spam_get.c qmail-1.03-3.2/spam_get.c
+--- qmail-1.03-3.1/spam_get.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/spam_get.c	2019-09-01 12:43:45.739347587 -0600
+@@ -0,0 +1,75 @@
++#include "stralloc.h"
++#include "spam.h"
++
++
++
++
++int spam_get(st,x,xlen)
++struct spam_t * st;
++char * x;
++unsigned int xlen;
++{
++  int n;
++  unsigned long u;
++
++  /*
++   * data entry format is dir\0st\0stmax\0flush\0rcpt\0tg\0tg_resp\0
++   */
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    if (!stralloc_copyb(&st->dir,x,n)) return -1;
++    if (!stralloc_0(&st->dir)) return -1;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    scan_ulong(x,&u);
++    st->throttle = u;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    scan_ulong(x,&u);
++    st->max = u;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    scan_ulong(x,&u);
++    st->flush = u;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    scan_ulong(x,&u);
++    st->reasonablercpt = u;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    scan_ulong(x,&u);
++    st->tg = u;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  n = byte_chr(x,xlen,0);
++  if (n > 0)
++  {
++    if (!stralloc_copyb(&st->tg_resp,x,n)) return -1;
++    if (!stralloc_0(&st->tg_resp)) return -1;
++  }
++  if (n++ == xlen) return 0; x += n; xlen -= n;
++
++  return 1;
++}
+diff -Nuar qmail-1.03-3.1/spam.h qmail-1.03-3.2/spam.h
+--- qmail-1.03-3.1/spam.h	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/spam.h	2019-09-01 12:43:45.739347587 -0600
+@@ -0,0 +1,28 @@
++#ifndef SPAM_H
++#define SPAM_H
++
++#include "stralloc.h"
++#include "substdio.h"
++
++extern int spam_wait();
++extern void spam_control();
++extern int spam_get();
++
++typedef struct spam_t {
++  unsigned int throttle;
++  unsigned int use_ip;	/* are we constructing dir using ip addr */
++  unsigned int max;
++  unsigned int reasonablercpt;
++  unsigned int flush;
++  unsigned int tg;	/* teergrube */
++  stralloc tg_resp;	/* continuation line response: <code>-<tg_resp> */
++  substdio * in;
++  substdio * out;
++  char * code;
++  stralloc dir;		/* was "char * dir" */
++  unsigned int rcptcount;
++} spam_t;
++
++#define spam_t_init(in,out) { 0, 0, 0, 0, 0, 0, { 0, 0, 0 }, (in), (out), "354-", { 0, 0, 0 }, 0 }
++
++#endif
+diff -Nuar qmail-1.03-3.1/TARGETS qmail-1.03-3.2/TARGETS
+--- qmail-1.03-3.1/TARGETS	2019-09-01 12:25:29.717536544 -0600
++++ qmail-1.03-3.2/TARGETS	2019-09-01 12:43:45.734347581 -0600
+@@ -429,3 +429,22 @@
+ qmail-todo.o
+ qmail-todo
+ update_tmprsadh
++spam.o
++spam_get.o
++open_rw.o
++lock_exfcntl.o
++lock_unfcntl.o
++fmt_2long.o
++fmt_2long0.o
++fmt_ulong0.o
++scan_2long.o
++control_time.o
++hastai.h
++time.o
++tai.lib
++qmail-newst.o
++qmail-newst
++qmail-spamt.5
++qmail-spamt.0
++qmail-spamthrottle.5
++qmail-spamthrottle.0
+diff -Nuar qmail-1.03-3.1/tcp-env.1 qmail-1.03-3.2/tcp-env.1
+--- qmail-1.03-3.1/tcp-env.1	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.2/tcp-env.1	2019-09-01 12:43:45.739347587 -0600
+@@ -4,7 +4,10 @@
+ .SH SYNOPSIS
+ .B tcp-env
+ [
+-.B \-rR
++.B \-rRhH
++]
++[
++.B \-l\fIlocalname
+ ]
+ [
+ .B \-t\fItimeout
+@@ -55,6 +58,20 @@
+ .B TCPREMOTEINFO
+ from the remote host.
+ .TP
++.B \-h
++(Default.)
++Look up the remote host name in DNS to set the environment variable
++.BR TCPREMOTEHOST .
++.TP
++.B \-H
++Do not look up the remote host name in DNS; remove the environment variable 
++.BR TCPREMOTEHOST .
++.TP
++.B \-l\fIlocalname
++Do not look up the local host name in DNS; use localname for the environment variable 
++.BR TCPLOCALHOST .
++A common choice for localname is 0.
++.TP
+ .B \-t\fItimeout
+ Give up on the
+ .B TCPREMOTEINFO
+diff -Nuar qmail-1.03-3.1/tcp-env.c qmail-1.03-3.2/tcp-env.c
+--- qmail-1.03-3.1/tcp-env.c	2019-09-01 12:25:29.625536490 -0600
++++ qmail-1.03-3.2/tcp-env.c	2019-09-01 12:43:45.739347587 -0600
+@@ -19,10 +19,13 @@
+ 
+ void die() { _exit(111); }
+ 
++int flagremotehost = 1;
++
+ struct sockaddr_in salocal;
+ unsigned long localport;
+ struct ip_address iplocal;
+ stralloc localname = {0};
++char *localhost = 0;
+ 
+ struct sockaddr_in saremote;
+ unsigned long remoteport;
+@@ -52,6 +55,9 @@
+      case 'r': flagremoteinfo = 1; break;
+      case 'R': flagremoteinfo = 0; break;
+      case 't': scan_ulong(sgoptarg,&timeout); break;
++     case 'H': flagremotehost = 0; break;
++     case 'h': flagremotehost = 1; break;
++     case 'l': localhost = sgoptarg; break;
+     }
+ 
+  argv += sgoptind;
+@@ -76,19 +82,26 @@
+    temp[ip_fmt(temp,&iplocal)] = 0;
+    if (!env_put2("TCPLOCALIP",temp)) die();
+ 
+-   switch(dns_ptr(&ssa,&iplocal))
++   if (!localhost)
++    {
++     switch(dns_ptr(&ssa,&iplocal))
++      {
++       case DNS_MEM: die();
++       case DNS_SOFT:
++         if (!stralloc_copys(&localname,"softdnserror")) die();
++       case 0:
++         if (!stralloc_copy(&localname,&ssa.sa[0])) die();
++         if (!stralloc_0(&localname)) die();
++         case_lowers(localname.s);
++         if (!env_put2("TCPLOCALHOST",localname.s)) die();
++         break;
++       default:
++         if (!env_unset("TCPLOCALHOST")) die();
++      }
++    }
++   if (localhost)
+     {
+-     case DNS_MEM: die();
+-     case DNS_SOFT:
+-       if (!stralloc_copys(&localname,"softdnserror")) die();
+-     case 0:
+-       if (!stralloc_copy(&localname,&ssa.sa[0])) die();
+-       if (!stralloc_0(&localname)) die();
+-       case_lowers(localname.s);
+-       if (!env_put2("TCPLOCALHOST",localname.s)) die();
+-       break;
+-     default:
+-       if (!env_unset("TCPLOCALHOST")) die();
++     if (!env_put2("TCPLOCALHOST",localhost)) die();
+     }
+ 
+    dummy = sizeof(saremote);
+@@ -102,19 +115,22 @@
+    temp[ip_fmt(temp,&ipremote)] = 0;
+    if (!env_put2("TCPREMOTEIP",temp)) die();
+ 
+-   switch(dns_ptr(&ssa,&ipremote))
++   if (flagremotehost)
+     {
+-     case DNS_MEM: die();
+-     case DNS_SOFT:
+-       if (!stralloc_copys(&remotename,"softdnserror")) die();
+-     case 0:
+-       if (!stralloc_copy(&remotename,&ssa.sa[0])) die();
+-       if (!stralloc_0(&remotename)) die();
+-       case_lowers(remotename.s);
+-       if (!env_put2("TCPREMOTEHOST",remotename.s)) die();
+-       break;
+-     default:
+-       if (!env_unset("TCPREMOTEHOST")) die();
++     switch(dns_ptr(&ssa,&ipremote))
++      {
++       case DNS_MEM: die();
++       case DNS_SOFT:
++         if (!stralloc_copys(&remotename,"softdnserror")) die();
++       case 0:
++         if (!stralloc_copy(&remotename,&ssa.sa[0])) die();
++         if (!stralloc_0(&remotename)) die();
++         case_lowers(remotename.s);
++         if (!env_put2("TCPREMOTEHOST",remotename.s)) die();
++         break;
++       default:
++         if (!env_unset("TCPREMOTEHOST")) die();
++      }
+     }
+ 
+    if (!env_unset("TCPREMOTEINFO")) die();
+diff -Nuar qmail-1.03-3.1/time.c qmail-1.03-3.2/time.c
+--- qmail-1.03-3.1/time.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/time.c	2019-09-01 12:43:45.740347588 -0600
+@@ -0,0 +1,82 @@
++#include "time.h"
++#include "stralloc.h"
++#include "fmt.h"
++#include "scan.h"
++
++void time_unpack(s,t)
++char *s;
++struct q_time_t *t;
++{
++#ifdef HASTAI
++  taia_unpack(s,t);
++#else
++  int i;
++
++  i = scan_ulong(s,&(t->tv_sec));
++  if (s[i] == ':')
++    scan_ulong(s+i+1,&(t->tv_usec));
++  else
++    t->tv_usec = 0;
++#endif
++}
++
++
++void time_pack(sa,t)
++stralloc *sa;
++struct q_time_t *t;
++{
++#ifdef HASTAI
++  stralloc_ready(sa,TAIA_PACK);
++  taia_pack(sa->s,t);
++  sa->len = TAIA_PACK;
++#else
++  char strnum[FMT_ULONG];
++
++  stralloc_catb(sa,strnum,fmt_ulong(strnum,(unsigned long)t->tv_sec));
++  stralloc_cats(sa,":");
++  stralloc_catb(sa,strnum,fmt_ulong0(strnum,(unsigned long)t->tv_usec,6));
++  stralloc_0(sa);
++#endif
++}
++
++void time_now(t)
++struct q_time_t *t;
++{
++#ifdef HASTAI
++  taia_now(t);
++#else
++  gettimeofday(t,0);
++#endif
++}
++
++
++void time_sub(td,t1,t2)
++struct q_time_t *td;
++struct q_time_t *t1;
++struct q_time_t *t2;
++{
++#ifdef HASTAI
++  taia_sub(td,t1,t2);
++#else
++  unsigned long usec = t1->tv_usec;
++  
++  td->tv_sec = t1->tv_sec - t2->tv_sec;
++  td->tv_usec = usec - t2->tv_usec;
++  if (td->tv_usec > usec)
++   {
++    td->tv_usec += 1000000UL;
++    --td->tv_sec;
++   }
++#endif
++}
++
++
++unsigned long time_ms(t)
++struct q_time_t *t;
++{
++#ifdef HASTAI
++  return (unsigned long)((taia_approx(t) + taia_frac(t)) * (double)1000.0);
++#else
++  return (unsigned long)((double)1000.0 * t->tv_sec + t->tv_usec / (double)1000.0);
++#endif
++}
+diff -Nuar qmail-1.03-3.1/time.h qmail-1.03-3.2/time.h
+--- qmail-1.03-3.1/time.h	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/time.h	2019-09-01 12:43:45.740347588 -0600
+@@ -0,0 +1,22 @@
++#ifndef TIME_H
++#define TIME_H
++
++#include "hastai.h"
++
++#ifdef HASTAI
++# include <taia.h>
++# define q_time_t	taia
++# define Q_TIME_PACK	TAIA_PACK
++#else
++# include <sys/time.h>
++# define q_time_t	timeval
++# define Q_TIME_PACK	0
++#endif
++
++void time_pack();
++void time_unpack();
++void time_now();
++void time_sub();
++unsigned long time_ms();
++
++#endif
+diff -Nuar qmail-1.03-3.1/tryltai.c qmail-1.03-3.2/tryltai.c
+--- qmail-1.03-3.1/tryltai.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/tryltai.c	2019-09-01 12:43:45.740347588 -0600
+@@ -0,0 +1,4 @@
++main()
++{
++  ;
++}
+diff -Nuar qmail-1.03-3.1/trytai.c qmail-1.03-3.2/trytai.c
+--- qmail-1.03-3.1/trytai.c	1969-12-31 17:00:00.000000000 -0700
++++ qmail-1.03-3.2/trytai.c	2019-09-01 12:43:45.740347588 -0600
+@@ -0,0 +1,7 @@
++#include <taia.h>
++
++void main()
++{
++  struct taia t;
++  taia_now(&t);
++}
+--- qmail-1.03-3.1/open_rw.c        2019-09-01 12:54:40.434143270 -0600
++++ qmail-1.03-3.2/open_rw.c        2019-09-01 14:21:53.800331782 -0600
+@@ -3,4 +3,4 @@
+ #include "open.h"
+
+ int open_rw(fn) char *fn;
+-{ return open(fn,O_RDWR | O_CREAT); }
++{ return open(fn,O_RDWR | O_CREAT,0600); }

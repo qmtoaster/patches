@@ -1,0 +1,71 @@
+diff -Nur qmail-1.03-13/qmail-smtpd.c qmail-1.03-14/qmail-smtpd.c
+--- qmail-1.03-13/qmail-smtpd.c	2018-07-04 13:15:25.360752951 -0600
++++ qmail-1.03-14/qmail-smtpd.c	2018-07-04 13:23:28.271468502 -0600
+@@ -612,7 +612,11 @@
+ void smtp_rcpt(arg) char *arg; {
+   if (!seenmail) { err_wantmail(); return; }
+   if (!addrparse(arg)) { err_syntax(); return; }
+-  if (flagbarfspf) { err_spf(); return; }
++  if (flagbarfspf) { 
++    strerr_warn6("qmail-smtpd: spf-reject: HELO(",helohost.s,") from ",remoteip,". MAILFROM:",mailfrom.s,0);
++	err_spf(); 
++	return;
++  }
+   if (flagbarfbhelo) {
+     if (logregex) {
+       strerr_warn6("qmail-smtpd: badhelo: <",helohost.s,"> at ",remoteip," matches pattern: ",matchedregex.s,0);
+@@ -900,15 +904,37 @@
+  
+   qqx = qmail_close(&qqt);
+   if (!*qqx) { acceptmessage(qp); return; }
+-  if (hops) { out("554 too many hops, this message is looping (#5.4.6)\r\n"); return; }
+-  if (databytes) if (!bytestooverflow) { err_size(); return; }
+-  if (flagmimetype < 0 || flagloadertype < 0 ) { 
+-    out("554 invalid message content "); 
+-    if (reply554) out(reply554); 
+-    out(" (#5.3.2)\r\n"); 
+-    return; 
++  if (hops) {
++       strerr_warn5("qmail-smtpd: looping-reject: MAILFROM:<",mailfrom.s,"> RCPTTO:<",rcptto.s+1,">",0);
++       out("554 too many hops, this message is looping (#5.4.6)\r\n");
++       return;
++  }
++  if (databytes) if (!bytestooverflow) {
++       strerr_warn5("qmail-smtpd: oversized-reject: MAILFROM:<",mailfrom.s,"> RCPTTO:<",rcptto.s+1,">",0);
++       err_size();
++       return;
++  }
++  if (flagmimetype == -1) {
++      strerr_warn5("qmail-smtpd: bad-mime-reject: MAILFROM:<",mailfrom.s,"> RCPTTO:<",rcptto.s+1,">",0);
++    out("554 invalid message content ");
++    if (reply554) out(reply554);
++    out(" (#5.3.2)\r\n");
++    return;
++  }
++  if (flagloadertype == -1) {
++      strerr_warn5("qmail-smtpd: bad-loader-reject: MAILFROM:<",mailfrom.s,"> RCPTTO:<",rcptto.s+1,">",0);
++    out("554 invalid message content ");
++    if (reply554) out(reply554);
++    out(" (#5.3.2)\r\n");
++    return;
++  }
++  if (*qqx == 'D') {
++       strerr_warn6("qmail-smtpd: qq hard reject (",qqx+1,"): MAILFROM:<",mailfrom.s,"> RCPTTO:",rcptto.s+1,0);
++       out("554 ");
++  } else {
++       strerr_warn6("qmail-smtpd: qq soft reject (",qqx+1,"): MAILFROM:<",mailfrom.s,"> RCPTTO:",rcptto.s+1,0);
++       out("451 ");
+   }
+-  if (*qqx == 'D') out("554 "); else out("451 ");
+   out(qqx + 1);
+   out("\r\n");
+ }
+@@ -1377,7 +1403,7 @@
+ , { 0, err_unimpl, flush }
+ } ;
+ 
+-void main(argc,argv)
++int main(argc,argv)
+ int argc;
+ char **argv;
+ {

@@ -1,0 +1,60 @@
+diff -Nur qmail-1.03-33/qmail-smtpd.c qmail-1.03-34/qmail-smtpd.c
+--- qmail-1.03-33/qmail-smtpd.c	2018-07-04 16:07:57.886729136 -0600
++++ qmail-1.03-34/qmail-smtpd.c	2018-07-04 16:08:35.547836838 -0600
+@@ -78,6 +78,7 @@
+ int tls_verify();
+ void tls_nogateway();
+ int ssl_rfd = -1, ssl_wfd = -1; /* SSL_get_Xfd() are broken */
++int forcetls = 1;
+ #endif
+ 
+ int safewrite(fd,buf,len) int fd; char *buf; int len;
+@@ -296,6 +297,8 @@
+   reply554 = env_get("REPLY554"); 
+ 
+ #ifdef TLS
++  x = env_get("FORCETLS");
++  if (x && !str_diff(x, "0")) forcetls = 0;
+   if (env_get("SMTPS")) { smtps = 1; tls_init(); }
+   else
+ #endif
+@@ -514,15 +514,20 @@
+   size[fmt_ulong(size,(unsigned int) databytes)] = 0;
+   smtp_greet("250-");
+ #ifdef TLS
+-  if (!ssl && (stat("control/servercert.pem",&st) == 0)) out("\r\n250-STARTTLS");
++  if (!ssl && (stat("control/servercert.pem",&st) == 0)) 
++    out("\r\n250-STARTTLS");
+ #endif
+-  out("\r\n250-PIPELINING\r\n250 8BITMIME\r\n");
+-  if (smtpauth == 1 || smtpauth == 11) out("250 AUTH LOGIN PLAIN\r\n");
+-  if (smtpauth == 2 || smtpauth == 12) out("250 AUTH CRAM-MD5\r\n");
+-  if (smtpauth == 3 || smtpauth == 13) out("250 AUTH LOGIN PLAIN CRAM-MD5\r\n");
+-  out("250 SIZE");
+-  out(size);
+-  out("\r\n");
++  out("\r\n250-PIPELINING\r\n250-8BITMIME\r\n");
++#ifdef TLS
++  if (!forcetls || ssl ) {
++#endif
++  if (smtpauth == 1 || smtpauth == 11) out("250-AUTH LOGIN PLAIN\r\n");
++  if (smtpauth == 2 || smtpauth == 12) out("250-AUTH CRAM-MD5\r\n");
++  if (smtpauth == 3 || smtpauth == 13) out("250-AUTH LOGIN PLAIN CRAM-MD5\r\n");
++#ifdef TLS
++  }
++#endif
++  out("250 SIZE "); out(size); out("\r\n");
+   seenmail = 0; dohelo(arg);
+   if (bhelook) flagbarfbhelo = bmcheck(BMCHECK_BHELO);
+ }
+@@ -1182,6 +1191,10 @@
+   if (seenauth) { err_authd(); return; }
+   if (seenmail) { err_authmail(); return; }
+ 
++#ifdef TLS
++  if (forcetls && !ssl) { out("538 auth not available without TLS (#5.3.3)\r\n"); return; }
++#endif
++
+   if (!stralloc_copys(&user,"")) die_nomem();
+   if (!stralloc_copys(&pass,"")) die_nomem();
+   if (!stralloc_copys(&resp,"")) die_nomem();

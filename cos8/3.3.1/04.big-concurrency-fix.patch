@@ -1,0 +1,16 @@
+diff -ruN ../netqmail-1.06-original/select.h2 netqmail-1.06/select.h2
+--- ../netqmail-1.06-original/select.h2 1998-06-15 12:53:16.000000000 +0200
++++ netqmail-1.06/select.h2     2016-11-22 21:03:57.127527599 +0100
+@@ -1,6 +1,12 @@
+ #ifndef SELECT_H
+ #define SELECT_H
+
++#include <features.h>
++#if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2)
++# include <bits/types.h>
++# undef __FD_SETSIZE
++# define __FD_SETSIZE 131077
++#endif
+ #include <sys/types.h>
+ #include <sys/time.h>
+ #include <sys/select.h>

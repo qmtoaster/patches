@@ -1,0 +1,43 @@
+diff -Nur qmail-1.03-31/qmail-smtpd.c qmail-1.03-32/qmail-smtpd.c
+--- qmail-smtpd.c	2018-07-04 16:00:16.520904217 -0600
++++ qmail-smtpd.c.new	2018-07-04 16:03:22.934339745 -0600
+@@ -124,6 +124,7 @@
+ void err_unimpl(arg) char *arg; { out("502 unimplemented (#5.5.1)\r\n"); }
+ void err_unrecog() { out("500 unrecognized (#5.5.2)\r\n"); }
+ void err_syntax() { out("555 syntax error (#5.5.4)\r\n"); }
++void err_relay() { out("553 we don't relay (#5.7.1)\r\n"); }
+ void err_wantmail() { out("503 MAIL first (#5.5.1)\r\n"); }
+ void err_wantrcpt() { out("503 RCPT first (#5.5.1)\r\n"); }
+ void err_noop(arg) char *arg; { out("250 ok\r\n"); }
+@@ -432,7 +432,22 @@
+   return r;
+ }
+
+-
++int addrrelay()
++{
++  int j;
++  j = addr.len;
++  while(--j >= 0)
++    if (addr.s[j] == '@') break;
++  if (j < 0) j = addr.len;
++  while(--j >= 0) {
++    if (addr.s[j] == '@') return 1;
++    if (addr.s[j] == '%') return 1;
++    if (addr.s[j] == '!') return 1;
++  }
++  return 0;
++}
++
++
+ int seenauth = 0;
+ int seenmail = 0;
+ int flagbarfbmf; /* defined if seenmail */
+@@ -627,6 +627,7 @@
+ /* end of empf pacth  */
+   if (!seenmail) { err_wantmail(); return; }
+   if (!addrparse(arg)) { err_syntax(); return; }
++  if (addrrelay()) { err_relay(); return; }
+   if (flagbarfspf) { 
+     strerr_warn6("qmail-smtpd: spf-reject: HELO(",helohost.s,") from ",remoteip,". MAILFROM:",mailfrom.s,0);
+ 	err_spf(); 
