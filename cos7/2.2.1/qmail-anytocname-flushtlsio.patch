@@ -1,0 +1,35 @@
+diff -uNr qmtqmail-1.03/dns.c qmtqmail-1.03-new/dns.c
+--- qmtqmail-1.03/dns.c	2017-04-20 08:54:53.142832827 -0600
++++ qmtqmail-1.03-new/dns.c	2017-04-20 08:59:46.309633810 -0600
+@@ -256,7 +256,7 @@
+    if (!sa->len) return loop;
+    if (sa->s[sa->len - 1] == ']') return loop;
+    if (sa->s[sa->len - 1] == '.') { --sa->len; continue; }
+-   switch(resolve(sa,T_ANY))
++   switch(resolve(sa,T_CNAME))
+     {
+      case DNS_MEM: return DNS_MEM;
+      case DNS_SOFT: return DNS_SOFT;
+diff -uNr qmtqmail-1.03/qmail-smtpd.c qmtqmail-1.03-new/qmail-smtpd.c
+--- qmtqmail-1.03/qmail-smtpd.c	2017-04-20 08:54:52.848840048 -0600
++++ qmtqmail-1.03-new/qmail-smtpd.c	2017-04-20 08:58:23.299671749 -0600
+@@ -723,7 +723,9 @@
+ 
+ char ssinbuf[1024];
+ substdio ssin = SUBSTDIO_FDBUF(saferead,0,ssinbuf,sizeof ssinbuf);
+-
++#ifdef TLS
++void flush_io() { ssin.p = 0; flush(); }
++#endif
+ 
+ stralloc line = {0};
+ stralloc base64types = {0};
+@@ -1398,7 +1400,7 @@
+ , { "rset", smtp_rset, 0 }
+ , { "help", smtp_help, flush }
+ #ifdef TLS
+-, { "starttls", smtp_tls, flush }
++, { "starttls", smtp_tls, flush_io }
+ #endif
+ , { "noop", err_noop, flush }
+ , { "vrfy", err_vrfy, flush }
