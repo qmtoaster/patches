@@ -1,3 +1,5 @@
+Patches Applied to qmail-1.03-3.3 / CentOS 8 (All in one patch below)
+
 Patch0: 01.q103-to-nq106.patch
 Patch1: 02.chkuser-2.0.9-release.adj.patch
 Patch2: 03.qmail-vpopmail-devel.adj.patch
@@ -68,4 +70,8 @@ Patch33: 34.qmail-inject-null-sender.patch
 %patch32 -p1
 %patch33 -p0
 
-qt-netqmail-1.06-1.0.0.patch
+All in one patch:
+
+Patch0: qt-netqmail-1.06-1.0.0.patch
+
+%patch0 -p1
