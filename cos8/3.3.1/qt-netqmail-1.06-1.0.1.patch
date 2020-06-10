@@ -12,7 +12,7 @@
  10 - warlord (Filter Windows Executables) - carryover
  11 - canonical rcpt patch (log real evelope recipient) - carryover
  12 - qregex (pattern, badhelo and etc..., matching) - carryover
- 13 - tls patch 20160918v - (SMTP SSL/TLS) Frederik Vermeulen - carryover
+ 13 - tls patch 20200107v - (SMTP SSL/TLS) Frederik Vermeulen - carryover
  14 - auth 0.83 - Erwin Hoffmann (SMTP Authentication) - update
  15 - force tls patch - Marcel Telka (Force TLS before authentication) - new
  16 - chkusr patch (Extends chkusr functionality) - carryover
@@ -1971,7 +1971,7 @@ diff -Nuar qmail-1.03/CHKUSER.changelog qmail-1.03tls2/CHKUSER.changelog
 +		enable usage of "#" and "+" characters within rcpt address
 +	added #define CHKUSER_ALLOW_RCPT_CHAR_1 '$'
 +	added #define CHKUSER_ALLOW_RCPT_CHAR_2 '%'
-+	added #define CHKUSER_ALLOW_RCPT_CHAR_3 '£'
++	added #define CHKUSER_ALLOW_RCPT_CHAR_3 'Â£'
 +	added #define CHKUSER_ALLOW_RCPT_CHAR_4 '?'
 +	added #define CHKUSER_ALLOW_RCPT_CHAR_5 '*'
 +	#define CHKUSER_ENABLE_USERS_EXTENSIONS
