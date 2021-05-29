@@ -13,4 +13,5 @@ Notes:
    from the beginning to the end of the SMTP session.
    
    With the most recent version of simscan (1.4.0-9) ppid is added to all output when evnvironment
-   variable SIMSCAN_DEBUG="5" is defined. With SMTP_DEBUG monitoring SMTP transactions is simplified. 
+   variable SIMSCAN_DEBUG="5" is defined. With SMTP_DEBUG (above) defined monitoring SMTP transactions 
+   is simplified. 
