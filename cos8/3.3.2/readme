@@ -10,3 +10,6 @@ Notes:
    SMTP 'quit' command. This causes the delivering host to resend the email until the transaction 
    is complete. The SMTP debug patch will track client connection commands and server responses 
    from the beginning to the end of the SMTP session.
+   
+   With the most recent version of simscan (1.4.0-9) ppid is added to all output when evnvironment
+   variable SIMSCAN_DEBUG="5" is defined. With SMTP_DEBUG monitoring SMTP transactions is simplified. 
