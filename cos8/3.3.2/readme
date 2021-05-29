@@ -5,8 +5,8 @@ Qmail Toaster 3.3.2 (qmail-1.03-3.3.2) consists of the 3.3.1 patch with the addi
    - Qualys patch CVE-2005-1513 (https://www.qualys.com/2020/05/19/cve-2005-1513/remote-code-execution-qmail.txt).
 
 Notes:
-   There are some, 2 that I know of, who have had multiple email deliveries because connections 
-   have died after email is queued but before the final SMTP 'quit' command. This causes the 
-   delivering host to resend the email until the transaction is complete. The SMTP debug patch 
-   will track client connection commands and server responses from the beginning to the end of 
-   the SMTP session.
+   There are 2 people in the Qmail Toaster community, myself included, who have had multiple 
+   email deliveries because connections have died after email is queued but before the final
+   SMTP 'quit' command. This causes the delivering host to resend the email until the transaction 
+   is complete. The SMTP debug patch will track client connection commands and server responses 
+   from the beginning to the end of the SMTP session.
