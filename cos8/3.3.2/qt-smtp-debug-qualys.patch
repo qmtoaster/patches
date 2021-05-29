@@ -1,0 +1,160 @@
+--- qmail-1.03-3.3.1/qmail-smtpd.c	2021-05-27 08:25:48.450764684 -0600
++++ qmail-1.03-3.3.1.done/qmail-smtpd.c	2021-05-27 12:54:50.783889531 -0600
+@@ -100,8 +100,26 @@
+ substdio ssout = SUBSTDIO_FDBUF(safewrite,1,ssoutbuf,sizeof ssoutbuf);
+ substdio sslog = SUBSTDIO_FDBUF(safewrite,2,sslogbuf,sizeof sslogbuf);
+ 
++int lflag = 0;
++int lgreet = 0;
++char ldbg[100];
++char * lhost = "server:";
++void lout(s,len) char *s; int len; {
++  lhost = "server:";
++  if ( strstr(s,"data>") || strstr(s,"<lf>") ) lhost = "client:";
++  if ( lgreet == 0 ) {
++    sprintf(ldbg,"%s[%d]:%*.*s",lhost,getpid(),len,len,s); 
++  } else {
++    if ( strstr(s,"\r\n250") ) sprintf(ldbg,"%2.2s%s[%d]:%*.*s",s,lhost,getpid(),len-2,len-2,s+2);
++    else {
++       if (strstr(s,"250 SIZE") ) sprintf(ldbg,"%s[%d]:%*.*s",lhost,getpid(),len,len,s);
++       else sprintf(ldbg,"%*.*s",len,len,s); 
++    }
++  } 
++  substdio_putsflush(&sslog,ldbg);
++}
+ void flush() { substdio_flush(&ssout); }
+-void out(s) char *s; { substdio_puts(&ssout,s); }
++void out(s) char *s; { substdio_puts(&ssout,s); if ( lflag ) { lout(s,strlen(s)); }  }
+ 
+ int saferead(fd,buf,len) int fd; char *buf; int len;
+ {
+@@ -173,8 +191,8 @@
+ 
+ void smtp_greet(code) char *code;
+ {
+-  substdio_puts(&ssout,code);
+-  substdio_put(&ssout,greeting.s,greeting.len);
++  substdio_puts(&ssout,code); if ( lflag ) { lout(code,strlen(code)); lgreet = 1; }
++  substdio_put(&ssout,greeting.s,greeting.len); if ( lflag ) { lout(greeting.s,greeting.len); }
+ }
+ void smtp_help(arg) char *arg;
+ {
+@@ -547,7 +565,7 @@
+ 
+ void smtp_helo(arg) char *arg;
+ {
+-  smtp_greet("250 "); out("\r\n");
++  smtp_greet("250 "); out("\r\n"); lgreet = 0;
+   seenmail = 0; dohelo(arg);
+   if (bhelook) flagbarfbhelo = bmcheck(BMCHECK_BHELO);
+ }
+@@ -577,7 +595,7 @@
+ #ifdef TLS
+   }
+ #endif
+-  out("250 SIZE "); out(size); out("\r\n");
++  out("250 SIZE "); out(size); out("\r\n"); lgreet = 0;
+   seenmail = 0; dohelo(arg);
+   if (bhelook) flagbarfbhelo = bmcheck(BMCHECK_BHELO);
+ }
+@@ -873,6 +891,7 @@
+   *hops = 0;
+   flaginheader = 1;
+   pos = 0; flagmaybex = flagmaybey = flagmaybez = 1;
++  if ( lflag ) lout("<data>\r\n",8);
+   for (;;) {
+     substdio_get(&ssin,&ch,1);
+     if (flaginheader) {
+@@ -909,12 +928,12 @@
+         state = 0;
+         break;
+       case 3: /* \n or \r\n   . */
+-        if (ch == '\n') return;
++        if (ch == '\n') {  if ( lflag ) { lout("<lf>.<lf>\r\n",11); lout("</data>\r\n",9); } return; }
+         if (ch == '\r') { state = 4; continue; }
+         state = 0;
+         break;
+       case 4: /* \n or \r\n  . \r */
+-        if (ch == '\n') return;
++        if (ch == '\n') { if ( lflag ) { lout("<cr><lf>.<cr><lf>\r\n",19); lout("</data>\r\n",9); } return; }
+         put (".");
+         put ("\r");
+         if (ch == '\r') { state = 1; continue; }
+@@ -951,13 +970,13 @@
+   datetime_sec when;
+   strnum[fmt_uint(strnum,(unsigned int) getpid())] = 0;
+   when = now();
+-  out("250 ok ");
++  out("250 ok "); lgreet = 1;
+   accept_buf[fmt_ulong(accept_buf,(unsigned long) when)] = 0;
+   out(accept_buf);
+   out(" qp ");
+   accept_buf[fmt_ulong(accept_buf,qp)] = 0;
+   out(accept_buf);
+-  out("\r\n");
++  out("\r\n"); lgreet = 0;
+   substdio_puts(&sslog, "mail recv: pid ");
+   substdio_puts(&sslog, strnum);
+   substdio_puts(&sslog, " from <");
+@@ -1537,8 +1556,9 @@
+   if (chdir(auto_qmail) == -1) die_control();
+   setup();
+   if (ipme_init() != 1) die_ipme();
++  if (env_get("SMTP_DEBUG")) { lflag = 1; }
+   smtp_greet("220 ");
+-  out(" ESMTP\r\n");
+-  if (commands(&ssin,&smtpcommands) == 0) die_read();
++  out(" ESMTP\r\n"); lgreet = 0;
++  if (commands(&ssin,&smtpcommands,&sslog) == 0) die_read();
+   die_nomem();
+ }
+--- qmail-1.03-3.3.1/commands.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.3.1.done/commands.c	2021-05-26 19:42:30.741202750 -0600
+@@ -6,12 +6,17 @@
+ 
+ static stralloc cmd = {0};
+ 
+-int commands(ss,c)
++int commands(ss,c,sslog)
+ substdio *ss;
+ struct commands *c;
++substdio *sslog;
+ {
+   int i;
+   char *arg;
++  char ldbg[100];
++  int lflag = 0;
++  
++  if ( getenv("SMTP_DEBUG") ) lflag = 1;
+ 
+   for (;;) {
+     if (!stralloc_copys(&cmd,"")) return -1;
+@@ -34,6 +39,10 @@
+     cmd.s[i] = 0;
+ 
+     for (i = 0;c[i].text;++i) if (case_equals(c[i].text,cmd.s)) break;
++    if ( lflag ) {
++      sprintf(ldbg,"client:[%d]:%s\n",getpid(),cmd.s);
++      substdio_puts(sslog,ldbg);
++    }
+     c[i].fun(arg);
+     if (c[i].flush) c[i].flush();
+   }
+--- qmail-1.03-3.3.1/alloc.c	1998-06-15 04:53:16.000000000 -0600
++++ qmail-1.03-3.3.1.done/alloc.c	2021-05-27 09:49:11.408012978 -0600
+@@ -1,3 +1,4 @@
++#include <limits.h>
+ #include "alloc.h"
+ #include "error.h"
+ extern char *malloc();
+@@ -15,6 +16,10 @@
+ unsigned int n;
+ {
+   char *x;
++  if (n >= (INT_MAX >> 3)) {
++    errno = error_nomem;
++    return 0;
++  }
+   n = ALIGNMENT + n - (n & (ALIGNMENT - 1)); /* XXX: could overflow */
+   if (n <= avail) { avail -= n; return space + avail; }
+   x = malloc(n);
