@@ -1,7 +1,7 @@
 
 Qmail Toaster 3.3.2 (qmail-1.03-3.3.2) consists of the 3.3.1 patch with the addition SMTP DEBUG and the Qualys' reccomendation:
-   - SMTP debug patch: If env variable SMTP_DEBUG is set the SMTP client/server command transaction (with pid) is logged from 
-   - client connection to server 221 (end of session) response. 
+   - SMTP debug patch: If env variable SMTP_DEBUG is set the SMTP client/server command transaction (with pid) is logged throughout
+   - from client connection to server 221 (end of session) response. 
    - Qualys patch CVE-2005-1513 (https://www.qualys.com/2020/05/19/cve-2005-1513/remote-code-execution-qmail.txt).
 
 Notes:
