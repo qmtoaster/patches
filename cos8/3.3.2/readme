@@ -1,3 +1,4 @@
+https://github.com/qmtoaster/patches/tree/master/cos8/3.3.1 (Plus below)...
 
 Qmail Toaster 3.3.2 (qmail-1.03-3.3.2) consists of the 3.3.1 patch with the addition SMTP DEBUG and the Qualys' reccomendation:
    - SMTP debug patch: If env variable SMTP_DEBUG is set the SMTP client/server command transaction (with pid) is logged throughout
