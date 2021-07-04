@@ -30,6 +30,12 @@
 30.qmail-1.03-reread-concurrency.2.patch 
 31.qmail-smtpd-pidqplog.patch 
 32.qmail-smtpd-relay-reject.adj.patch 
-33.doublebounce-trim.patch 
+33.doublebounce-trim.patch
 34.qmail-inject-null-sender.patch 
 35.spamthrottle-2.03.patch
+qt-qualys.patch
+qt-smtp-command-debug.patch
+qt-smtp-smtpd-debug.patch
+
+patches 1 thru 35 are combined into one:  qt-netqmail-1.06-1.0.1.patch
+
