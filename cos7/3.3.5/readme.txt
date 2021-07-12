@@ -58,3 +58,14 @@ Notes:
    With the most recent version of simscan (1.4.0-9) ppid is added to all output when evnvironment
    variable SIMSCAN_DEBUG="5" is defined. With SMTP_DEBUG (above) defined monitoring SMTP transactions 
    is simplified. 
+   
+   In order to log SMTP TX to different file you can edit /var/qmail/supervise/smtp/log/run and replace everything with the following:
+      
+      #!/bin/sh
+      LOGSIZE=`cat /var/qmail/control/logsize`
+      LOGCOUNT=`cat /var/qmail/control/logcount`
+      exec /usr/bin/setuidgid qmaill \
+        /usr/bin/multilog t s$LOGSIZE n$LOGCOUNT \
+        '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
+        '+*' '-@* *server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1
+
