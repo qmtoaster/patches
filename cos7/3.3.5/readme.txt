@@ -59,7 +59,8 @@ Notes:
    variable SIMSCAN_DEBUG="5" is defined. With SMTP_DEBUG (above) defined monitoring SMTP transactions 
    is simplified. 
    
-   In order to log SMTP TX to different file you can edit /var/qmail/supervise/smtp/log/run and replace everything with the following:
+   In order to log SMTP TX to different file you can stop qmail edit '/var/qmail/supervise/smtp/log/run' and replace everything with below, save
+   and start qmail :
       
       #!/bin/sh
       LOGSIZE=`cat /var/qmail/control/logsize`
