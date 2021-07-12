@@ -68,5 +68,5 @@ Notes:
       exec /usr/bin/setuidgid qmaill \
         /usr/bin/multilog t s$LOGSIZE n$LOGCOUNT \
         '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
-        '+*' '-@* *server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1
+        '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1
 
