@@ -70,3 +70,4 @@ Notes:
         '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
         '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1
 
+# tail -f /var/log/qmail/smtptx/current | tai64nlocal
