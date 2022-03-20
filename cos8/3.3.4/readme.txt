@@ -1,15 +1,14 @@
 3.3.2 patch https://github.com/qmtoaster/patches/tree/master/cos8/3.3.2
 
-in addition the patches below (linked above).
+smtp debug patches seperated from Qualy's patch
 
 last 3 patches:
 
-Qmail Toaster 3.3.4 (qmail-1.03-3.3.4) consists of the 3.3.1 patched with the addition SMTP DEBUG and the Qualys' reccomendation:
+Qmail Toaster 3.3.4 (qmail-1.03-3.3.4) consists of the 3.3.1 patched with the addition SMTP DEBUG:
    - SMTP debug patch: If env variable SMTP_DEBUG is set the SMTP client/server command transaction (with pid) is logged throughout
    - from client connection to server 221 (end of session) response. This is an update of the previous DEBUG patch to be less intrusive
    - to the qmail-smtpd.
-   - Includes Qualys patch CVE-2005-1513 (https://www.qualys.com/2020/05/19/cve-2005-1513/remote-code-execution-qmail.txt).
-
+  
 Notes:
    Several individuals in the Qmail Toaster community, myself included, have had duplicate 
    email deliveries, fortunately not often, because connections have died after email is 
