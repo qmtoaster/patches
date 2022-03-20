@@ -1,2 +1,3 @@
 3.3.1 https://github.com/qmtoaster/patches/tree/master/cos8/3.3.1
   - Includes Qualys patch CVE-2005-1513 (https://www.qualys.com/2020/05/19/cve-2005-1513/remote-code-execution-qmail.txt).
+  - Included SMTP Debug (export SMTP_DEBUG)
