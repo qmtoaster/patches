@@ -1,6 +1,6 @@
 3.3.4 patch: https://github.com/qmtoaster/patches/tree/master/cos8/3.3.4
 
-and in addition qt-smtp-smtpd-debug-f2b.patch (link above).
+qt-smtp-command-debug.patch is replaced by qt-smtp-smtpd-debug-f2b.patch (link above).
 
 Notes:
    Several individuals in the Qmail Toaster community, myself included, have had duplicate 
