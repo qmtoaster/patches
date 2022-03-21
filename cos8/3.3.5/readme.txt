@@ -3,7 +3,7 @@
 qt-smtp-command-debug.patch is replaced by qt-smtp-smtpd-debug-f2b.patch (link above).
 
    In order to log SMTP TX to different file you can stop qmail edit '/var/qmail/supervise/smtp/log/run' and replace everything with below, save
-   and start qmail :
+   and start qmail. Logs in such a way so that Fail to Ban can be used to reject connections from IP's that immediately disconnect :
       
       #!/bin/sh
       LOGSIZE=`cat /var/qmail/control/logsize`
