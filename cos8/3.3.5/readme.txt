@@ -15,6 +15,6 @@ qt-smtp-command-debug.patch is replaced by qt-smtp-smtpd-debug-f2b.patch (link a
 
 # tail -f /var/log/qmail/smtptx/current | tai64nlocal
 
-FailtoBan can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:
+Fail2Ban can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:
     503 auth not available (#5.3.3) - xxx.xxx.xxx.xxx 
 This format can be added to FailtoBan to block the associated IP address.
