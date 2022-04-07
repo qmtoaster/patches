@@ -1,0 +1,133 @@
+--- spamdyke-5.0.1/spamdyke/configure	2015-04-29 18:53:36.000000000 -0600
++++ spamdyke-5.0.1-new/spamdyke/configure	2022-03-28 10:09:40.501348410 -0600
+@@ -3988,9 +3988,11 @@
+ See \`config.log' for more details" "$LINENO" 5; }
+ fi
+ 
+-                         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SSL_library_init" >&5
+-$as_echo_n "checking for library containing SSL_library_init... " >&6; }
+-if ${ac_cv_search_SSL_library_init+:} false; then :
++[ "`strings /usr/lib64/libssl.so | grep SSL_library_init`"  != "" ] && INIT=SSL_library_init || INIT=OPENSSL_init_ssl
++
++                         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing $INIT" >&5
++$as_echo_n "checking for library containing $INIT... " >&6; }
++if ${ac_cv_search_init+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+   ac_func_search_save_LIBS=$LIBS
+@@ -4003,11 +4005,11 @@
+ #ifdef __cplusplus
+ extern "C"
+ #endif
+-char SSL_library_init ();
++char $INIT ();
+ int
+ main ()
+ {
+-return SSL_library_init ();
++return $INIT ();
+   ;
+   return 0;
+ }
+@@ -4020,25 +4022,25 @@
+     LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+   fi
+   if ac_fn_c_try_link "$LINENO"; then :
+-  ac_cv_search_SSL_library_init=$ac_res
++  ac_cv_search_init=$ac_res
+ fi
+ rm -f core conftest.err conftest.$ac_objext \
+     conftest$ac_exeext
+-  if ${ac_cv_search_SSL_library_init+:} false; then :
++  if ${ac_cv_search_init+:} false; then :
+   break
+ fi
+ done
+-if ${ac_cv_search_SSL_library_init+:} false; then :
++if ${ac_cv_search_init+:} false; then :
+ 
+ else
+-  ac_cv_search_SSL_library_init=no
++  ac_cv_search_init=no
+ fi
+ rm conftest.$ac_ext
+ LIBS=$ac_func_search_save_LIBS
+ fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_SSL_library_init" >&5
+-$as_echo "$ac_cv_search_SSL_library_init" >&6; }
+-ac_res=$ac_cv_search_SSL_library_init
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_init" >&5
++$as_echo "$ac_cv_search_init" >&6; }
++ac_res=$ac_cv_search_init
+ if test "$ac_res" != no; then :
+   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+    LIBS="$LIBS -lssl"
+--- spamdyke-5.0.1/spamdyke/tls.c	2015-04-29 18:53:36.000000000 -0600
++++ spamdyke-5.0.1-new/spamdyke/tls.c	2022-03-28 10:26:14.380023023 -0600
+@@ -186,7 +186,11 @@
+ 
+   if (!initialized)
+     {
+-    SSL_library_init();
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++    OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS,NULL); /* TLS 1.3 */
++#else
++    SSL_library_init();                                   /* TLS < 1.3 */
++#endif
+ 
+     if (!RAND_status())
+       {
+@@ -213,7 +217,11 @@
+ 
+   if (initialized)
+     {
+-    if ((*target_tls_context = SSL_CTX_new(SSLv23_server_method())) != NULL)
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++    if ((*target_tls_context = SSL_CTX_new(TLS_server_method())) != NULL) /* TLS 1.3 */
++#else
++    if ((*target_tls_context = SSL_CTX_new(SSLv23_server_method())) != NULL) /* TLS < 1.3 */
++#endif    
+       {
+       error_occurred = 0;
+ 
+@@ -275,9 +283,15 @@
+       if (!error_occurred &&
+           (current_settings->current_options->tls_dhparams_file != NULL))
+         {
+-        if ((SSL_CTX_set_options(*target_tls_context, SSL_OP_SINGLE_DH_USE) & SSL_OP_SINGLE_DH_USE) == SSL_OP_SINGLE_DH_USE)
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++        if (SSL_CTX_set_min_proto_version(*target_tls_context,TLS1_VERSION) && SSL_CTX_set_max_proto_version(*target_tls_context,TLS1_3_VERSION)) /* TLS 1.3 */
++          {
++          SPAMDYKE_LOG_EXCESSIVE(current_settings, LOG_DEBUGX_TLS_OPTIONS, "SSL_TLS1_MIN_TLS1_3_MAX_SET");
++#else
++        if ((SSL_CTX_set_options(*target_tls_context, SSL_OP_SINGLE_DH_USE) & SSL_OP_SINGLE_DH_USE) == SSL_OP_SINGLE_DH_USE) /* TLS < 1.3 */
+           {
+           SPAMDYKE_LOG_EXCESSIVE(current_settings, LOG_DEBUGX_TLS_OPTIONS, "SSL_OP_SINGLE_DH_USE");
++#endif
+ 
+           if ((tmp_file = fopen(current_settings->current_options->tls_dhparams_file, "r")) != NULL)
+             {
+@@ -309,14 +323,22 @@
+           }
+         else
+           {
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++          SPAMDYKE_LOG_ERROR(current_settings, LOG_ERROR_TLS_OPTIONS "SSL_TLS1_MIN_TLS1_3_MAX_SET", NULL);
++#else
+           SPAMDYKE_LOG_ERROR(current_settings, LOG_ERROR_TLS_OPTIONS "SSL_OP_SINGLE_DH_USE", NULL);
++#endif
+           error_occurred = 1;
+           }
+         }
+ 
+       if (!error_occurred)
+         {
+-        if ((tls_return = SSL_CTX_set_cipher_list(*target_tls_context, current_settings->current_options->tls_cipher_list)) == 1)
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++        if ((tls_return = SSL_CTX_set_ciphersuites(*target_tls_context, current_settings->current_options->tls_cipher_list)) == 1) /* TLS 1.3 */ 
++#else
++        if ((tls_return = SSL_CTX_set_cipher_list(*target_tls_context, current_settings->current_options->tls_cipher_list)) == 1) /* TLS < 1.3 */
++#endif
+           SPAMDYKE_LOG_EXCESSIVE(current_settings, LOG_DEBUGX_TLS_CIPHER_LIST, current_settings->current_options->tls_cipher_list);
+         else
+           {
