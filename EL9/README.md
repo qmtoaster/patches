@@ -1,4 +1,4 @@
-Patches: https://github.com/qmtoaster/patches/tree/master/cos8/3.3.6
+Patches: https://github.com/qmtoaster/patches/tree/master/cos8/3.3.6<br>
 
 Patches Applied: 
 
