@@ -1,5 +1,5 @@
 Patches Applied:<br>
-<a href="hhttps://github.com/qmtoaster/patches/blob/master/cos8/3.3.1/qt-netqmail-1.06-1.0.1.patch">qt-netqmail-1.06-1.0.1.patch</a><br>
+<a href="https://github.com/qmtoaster/patches/blob/master/cos8/3.3.1/qt-netqmail-1.06-1.0.1.patch">qt-netqmail-1.06-1.0.1.patch</a><br>
 <a href="">qt-smtp-smtpd-debug-f2b.patch</a><br>
 <a href="">qt-smtp-command-debug.patch</a><br>
 <a href="">qt-qualys.patch</a><br>
