@@ -6,10 +6,10 @@ Patches Applied:<br>
 
 qt-smtp-command-debug.patch is replaced by qt-smtp-smtpd-debug-f2b.patch (link above).
 
-In order to log SMTP transactions do the following:
-qmailctl stop
-Add 'SMTP_DEBUG="1"' to /etc/tcprules.d/tcp.smtp 
-Replace contents of '/var/qmail/supervise/smtp/log/run' script with below to log transactions to different file:
+In order to log SMTP transactions do the following:<br>
+qmailctl stop<br>
+Add 'SMTP_DEBUG="1"' to /etc/tcprules.d/tcp.smtp<br> 
+Replace contents of '/var/qmail/supervise/smtp/log/run' script with below to log transactions to different file:<br>
    <pre>    
       #!/bin/sh
       LOGSIZE=`cat /var/qmail/control/logsize`
