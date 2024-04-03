@@ -1,4 +1,4 @@
-Patches Applied to qmail-1.03-3.3.1 / CentOS 8 (All in one patch below)<br>
+Patches Applied to qmail-1.03-3.3.1 / CentOS 7 & 8 (All in one patch below)<br>
 
 01.q103-to-nq106.patch<br>
 02.chkuser-2.0.9-release.adj.patch<br>
@@ -36,41 +36,41 @@ Patches Applied to qmail-1.03-3.3.1 / CentOS 8 (All in one patch below)<br>
 34.qmail-inject-null-sender.patch<br>
 35.spamthrottle-2.03.patch<br>
 
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p0
-%patch11 -p1
-%patch12 -p1
-%patch13 -p1
-%patch14 -p1
-%patch15 -p1
-%patch16 -p1
-%patch17 -p1
-%patch18 -p1
-%patch19 -p2
-%patch20 -p1
-%patch21 -p1
-%patch22 -p0
-%patch23 -p0
-%patch24 -p0
-%patch25 -p1
-%patch26 -p0
-%patch27 -p0
-%patch28 -p1
-%patch29 -p1
-%patch30 -p1
-%patch31 -p0
-%patch32 -p1
-%patch33 -p0
-%patch34 -p1
+%patch0 -p1<br>
+%patch1 -p1<br>
+%patch2 -p1<br>
+%patch3 -p1<br>
+%patch4 -p1<br>
+%patch5 -p1<br>
+%patch6 -p1<br>
+%patch7 -p1<br>
+%patch8 -p1<br>
+%patch9 -p1<br>
+%patch10 -p0<br>
+%patch11 -p1<br>
+%patch12 -p1<br>
+%patch13 -p1<br>
+%patch14 -p1<br>
+%patch15 -p1<br>
+%patch16 -p1<br>
+%patch17 -p1<br>
+%patch18 -p1<br>
+%patch19 -p2<br>
+%patch20 -p1<br>
+%patch21 -p1<br>
+%patch22 -p0<br>
+%patch23 -p0<br>
+%patch24 -p0<br>
+%patch25 -p1<br>
+%patch26 -p0<br>
+%patch27 -p0<br>
+%patch28 -p1<br>
+%patch29 -p1<br>
+%patch30 -p1<br>
+%patch31 -p0<br>
+%patch32 -p1<br>
+%patch33 -p0<br>
+%patch34 -p1<br>
 
 All in one patch:
 
