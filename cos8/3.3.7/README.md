@@ -1,4 +1,4 @@
-This is a clean up of the previous patch: 
+This is a clean up of the previous patch:<br>
    qt-smtp-tls13.patch<br>
       replaced by<br>
    qt-smtp-tls13-v2.patch<br>
