@@ -33,7 +33,7 @@ Patches Applied to qmail-1.03-3.3.1 / CentOS 7 & 8 (All in one patch below)<br>
 31.qmail-smtpd-pidqplog.patch<br>
 32.qmail-smtpd-relay-reject.adj.patch<br>
 33.doublebounce-trim.patch <br>
-34.qmail-inject-null-sender.patch<br
+34.qmail-inject-null-sender.patch<br>
 
 %patch0 -p1<br>
 %patch1 -p1<br>
