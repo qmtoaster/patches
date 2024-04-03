@@ -1,16 +1,16 @@
-Patch0:    qmailtoaster-1.3.2.patch<br>
-Patch1:    qmailtoaster-chkuser.patch<br>
-Patch2:    qmail-require_auth.patch<br>
-Patch3:    qmail-dk-0.6.beta.2.patch<br>
-Patch4:    qmail-smtpd-spf-qq-reject-logging.patch<br>
-Patch5:    qmail-srs-qt-0.5.patch<br>
-Patch6:    qmailtoaster-big-dns.patch<br>
-Patch7:    qmail-smtpd-linefeed.patch<br>
-Patch8:    qmail-empf.patch<br>
-Patch9:    qmail-vpopmail-devel.patch<br>
-Patch10:   qmail-uids.patch<br>
-Patch11:   qmail-anytocname-flushtlsio.patch<br>
-Patch12:   qmail-rm-cname.patch<br>
+Patch0:    <a href="">qmailtoaster-1.3.2.patch</a><br>
+Patch1:    <a href="">qmailtoaster-chkuser.patch</a><br>
+Patch2:    <a href="">qmail-require_auth.patch</a><br>
+Patch3:    <a href="">qmail-dk-0.6.beta.2.patch</a><br>
+Patch4:    <a href="">qmail-smtpd-spf-qq-reject-logging.patch</a><br>
+Patch5:    <a href="">qmail-srs-qt-0.5.patch</a><br>
+Patch6:    <a href="">qmailtoaster-big-dns.patch</a><br>
+Patch7:    <a href="">qmail-smtpd-linefeed.patch</a><br>
+Patch8:    <a href="">qmail-empf.patch</a><br>
+Patch9:    <a href="">qmail-vpopmail-devel.patch<</a>br>
+Patch10:   <a href="">qmail-uids.patch</a><br>
+Patch11:   <a href="">qmail-anytocname-flushtlsio.patch</a><br>
+Patch12:   <a href="">qmail-rm-cname.patch</a><br>
 <br>
 %patch0 -p1<br>
 %patch1 -p1<br>
