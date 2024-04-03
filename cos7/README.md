@@ -17,7 +17,8 @@ Replace contents of '/var/qmail/supervise/smtp/log/run' script with below to log
       exec /usr/bin/setuidgid qmaill \
       /usr/bin/multilog t s$LOGSIZE n$LOGCOUNT \
       '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
-      '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1</pre><br>
+      '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1
+   </pre>
 qmailctl start && qmailctl cdb
 tail -f /var/log/qmail/smtptx/current | tai64nlocal<br>
 Fail2Ban can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:<br>
