@@ -8,7 +8,7 @@ Patch6:    <a href="">qmailtoaster-big-dns.patch</a><br>
 Patch7:    <a href="">qmail-smtpd-linefeed.patch</a><br>
 Patch8:    <a href="">qmail-empf.patch</a><br>
 Patch9:    <a href="">qmail-vpopmail-devel.patch</a><br>
-Patch10:   <a href="">qmail-uids.patch</a><br>
+Patch10:   <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-uids.patch">qmail-uids.patch</a><br>
 Patch11:   <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-anytocname-flushtlsio.patch">qmail-anytocname-flushtlsio.patch</a><br>
 Patch12:   <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-rm-cname.patch">qmail-rm-cname.patch</a><br>
 <br>
