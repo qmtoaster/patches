@@ -11,12 +11,12 @@ In order to log SMTP transactions do the following:
 2) Add 'SMTP_DEBUG="1"' to /etc/tcprules.d/tcp.smtp 
 3) Replace contents of '/var/qmail/supervise/smtp/log/run' script with below to log transactions to different file:    
       <pre>#!/bin/sh
-    LOGSIZE=`cat /var/qmail/control/logsize`
-     LOGCOUNT=`cat /var/qmail/control/logcount`
-     exec /usr/bin/setuidgid qmaill \
-       /usr/bin/multilog t s$LOGSIZE n$LOGCOUNT \
-       '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
-       '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1</pre>
+      LOGSIZE=`cat /var/qmail/control/logsize`
+      LOGCOUNT=`cat /var/qmail/control/logcount`
+      exec /usr/bin/setuidgid qmaill \
+      /usr/bin/multilog t s$LOGSIZE n$LOGCOUNT \
+      '-*' '+@* server:[*' '+@* client:[*' /var/log/qmail/smtptx \
+      '+*' '-@* server:[*' '-@* client:[*' /var/log/qmail/smtp 2>&1</pre>
 4) qmailctl start && qmailctl cdb
 5) tail -f /var/log/qmail/smtptx/current | tai64nlocal<br>
 Fail2Ban can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:<br>
