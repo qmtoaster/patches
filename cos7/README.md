@@ -23,4 +23,5 @@ qmailctl start && qmailctl cdb
 tail -f /var/log/qmail/smtptx/current | tai64nlocal<br>
 Fail2Ban can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:<br>
     503 auth not available (#5.3.3) - xxx.xxx.xxx.xxx<br>
+    <a href="https://www.digitalocean.com/community/tutorials/how-to-set-up-master-slave-replication-in-mysql" target="_blank">MySQL Replication></a>
 See <a href="http://wiki.qmailtoaster.org/index.php?title=Fail2ban" target="_blank">QMT wiki</a>
