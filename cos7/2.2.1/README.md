@@ -1,5 +1,5 @@
 Patch0:    <a href="">qmailtoaster-1.3.2.patch</a><br>
-Patch1:    <a href="">qmailtoaster-chkuser.patch</a><br>
+Patch1:    <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmailtoaster-chkuser.patch">qmailtoaster-chkuser.patch</a><br>
 Patch2:    <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-require_auth.patch">qmail-require_auth.patch</a><br>
 Patch3:    <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-dk-0.6.beta.2.patch">qmail-dk-0.6.beta.2.patch</a><br>
 Patch4:    <a href="https://github.com/qmtoaster/patches/blob/master/cos7/2.2.1/qmail-smtpd-spf-qq-reject-logging.patch">qmail-smtpd-spf-qq-reject-logging.patch</a><br>
