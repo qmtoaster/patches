@@ -1,4 +1,4 @@
-Spamdyke OpenSSL 1.1.1
+Spamdyke OpenSSL 1.1.1 <a href="https://github.com/qmtoaster/patches/blob/master/spamdyke/spamdyke-openssl.patch">Patch</a>
 
 spamdyke >= 5.0.1-3, EL >= 8 add below line to spamdyke.conf otherwise spamdyke will not work.
 
