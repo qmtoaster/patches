@@ -23,4 +23,4 @@ qt-smtp-command-debug.patch is replaced by qt-smtp-smtpd-debug-f2b.patch (link a
 
 Fail2Ban can be used to block IP's trying to authorize outside TLS, the log entry is in the following form:
     503 auth not available (#5.3.3) - xxx.xxx.xxx.xxx 
-This format can be added to Fail2Ban to block the associated IP address. See http://qmailtoaster.com/fail2ban.html 
+This format can be added to Fail2Ban to block the associated IP address. See <a href="http://wiki.qmailtoaster.org/index.php?title=Fail2ban">Wiki Fail2ban</a>
