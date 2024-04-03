@@ -1,4 +1,7 @@
-This is a clean up of the previous patch: qt-smtp-tls13.patch replaced by qt-smtp-tls13-v2.patch
+This is a clean up of the previous patch: 
+   qt-smtp-tls13.patch<br>
+      replaced by<br>
+   qt-smtp-tls13-v2.patch<br>
 <a href="https://github.com/qmtoaster/patches/tree/master/cos8/3.3.6">3.3.6 Patches</a>
 
 Patches Applied:<br>
