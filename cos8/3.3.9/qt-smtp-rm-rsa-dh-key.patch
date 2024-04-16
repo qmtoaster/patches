@@ -1,9 +1,9 @@
---- qmail-1.03-3.3.7/qmail-smtpd.c  2022-09-20 08:31:03.000000000 -0600
-+++ qmail-1.03-3.3.9/qmail-smtpd.c  2024-04-15 10:56:17.779708313 -0600
+--- qmail-1.03-3.3.7/qmail-smtpd.c	2022-09-20 08:31:03.000000000 -0600
++++ qmail-1.03-3.3.9/qmail-smtpd.c	2024-04-15 10:56:17.779708313 -0600
 @@ -1309,53 +1309,6 @@
    else tls_init();
  }
-
+ 
 -RSA *tmp_rsa_cb(SSL *ssl, int export, int keylen)
 -{
 -  RSA *rsa;
@@ -19,7 +19,7 @@
 -  }
 -#if OPENSSL_VERSION_NUMBER >= 0x10100000L
 -  BIGNUM *e; /*exponent */
--  e = BN_new();
+-  e = BN_new(); 
 -  BN_set_word(e, RSA_F4);
 -  if (RSA_generate_key_ex(rsa, keylen, e, NULL) == 1)
 -    return rsa;
@@ -49,16 +49,17 @@
 -#else
 -  return DH_generate_parameters(keylen, DH_GENERATOR_2, NULL, NULL);
 -#endif
--}
+-} 
 -
  /* don't want to fail handshake if cert isn't verifiable */
  int verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx) { return 1; }
-
+ 
 @@ -1545,8 +1498,6 @@
  #endif
    alloc_free(saciphers.s);
-
+ 
 -  SSL_set_tmp_rsa_callback(myssl, tmp_rsa_cb);
 -  SSL_set_tmp_dh_callback(myssl, tmp_dh_cb);
    SSL_set_rfd(myssl, ssl_rfd = substdio_fileno(&ssin));
    SSL_set_wfd(myssl, ssl_wfd = substdio_fileno(&ssout));
+ 
