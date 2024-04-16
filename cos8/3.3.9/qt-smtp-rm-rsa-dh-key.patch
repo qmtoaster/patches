@@ -1,1 +1,64 @@
+--- qmail-1.03-3.3.7/qmail-smtpd.c  2022-09-20 08:31:03.000000000 -0600
++++ qmail-1.03-3.3.9/qmail-smtpd.c  2024-04-15 10:56:17.779708313 -0600
+@@ -1309,53 +1309,6 @@
+   else tls_init();
+ }
 
+-RSA *tmp_rsa_cb(SSL *ssl, int export, int keylen)
+-{
+-  RSA *rsa;
+-
+-  if (!export) keylen = 2048;
+-  if (keylen == 2048) {
+-    FILE *in = fopen("control/rsa2048.pem", "r");
+-    if (in) {
+-      rsa = PEM_read_RSAPrivateKey(in, NULL, NULL, NULL);
+-      fclose(in);
+-      if (rsa) return rsa;
+-    }
+-  }
+-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+-  BIGNUM *e; /*exponent */
+-  e = BN_new();
+-  BN_set_word(e, RSA_F4);
+-  if (RSA_generate_key_ex(rsa, keylen, e, NULL) == 1)
+-    return rsa;
+-  return NULL;
+-#else
+-  return RSA_generate_key(keylen, RSA_F4, NULL, NULL);
+-#endif
+-}
+-
+-DH *tmp_dh_cb(SSL *ssl, int export, int keylen)
+-{
+-  DH *dh;
+-
+-  if (!export) keylen = 2048;
+-  if (keylen == 2048) {
+-    FILE *in = fopen("control/dh2048.pem", "r");
+-    if (in) {
+-      dh = PEM_read_DHparams(in, NULL, NULL, NULL);
+-      fclose(in);
+-      if (dh) return dh;
+-    }
+-  }
+-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+-  if((dh = DH_new()) && (DH_generate_parameters_ex(dh, keylen, DH_GENERATOR_2, NULL) == 1))
+-    return dh;
+-  return NULL;
+-#else
+-  return DH_generate_parameters(keylen, DH_GENERATOR_2, NULL, NULL);
+-#endif
+-}
+-
+ /* don't want to fail handshake if cert isn't verifiable */
+ int verify_cb(int preverify_ok, X509_STORE_CTX *x509_ctx) { return 1; }
+
+@@ -1545,8 +1498,6 @@
+ #endif
+   alloc_free(saciphers.s);
+
+-  SSL_set_tmp_rsa_callback(myssl, tmp_rsa_cb);
+-  SSL_set_tmp_dh_callback(myssl, tmp_dh_cb);
+   SSL_set_rfd(myssl, ssl_rfd = substdio_fileno(&ssin));
+   SSL_set_wfd(myssl, ssl_wfd = substdio_fileno(&ssout));
