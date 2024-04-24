@@ -4,6 +4,6 @@ Patches Applied (qmail-1.03-3.3.7):<br>
 <a href="https://github.com/qmtoaster/patches/blob/master/cos8/3.3.4/qt-smtp-command-debug.patch">qt-smtp-command-debug.patch</a><br>
 <a href="https://github.com/qmtoaster/patches/blob/master/cos8/3.3.4/qt-qualys.patch">qt-qualys.patch</a><br>
 <a href="https://github.com/qmtoaster/patches/blob/master/cos8/3.3.7/qt-smtp-tls13-v2.patch">qt-smtp-tls13-v2.patch</a><br>
-Patches Applied (qmail-1.03-3.3.9):<br>
+Patches Applied (qmail-1.03-3.3.11):<br>
   Above patches, additionally<br>
 <a href="https://github.com/qmtoaster/patches/blob/master/cos8/3.3.9/qt-smtp-rm-rsa-dh-key.patch">qt-smtp-rm-rsa-dh-key.patch</a>
